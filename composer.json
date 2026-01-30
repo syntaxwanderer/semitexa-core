@@ -1,7 +1,7 @@
 {
     "name": "syntexa/core",
     "description": "Core framework functionality for Syntexa Framework",
-    "type": "library",
+    "type": "composer-plugin",
     "license": "MIT",
     "authors": [
         {
@@ -11,6 +11,7 @@
     ],
     "require": {
         "php": "^8.4",
+        "composer-plugin-api": "^2.0",
         "syntexa/docs": "^1.0",
         "php-di/php-di": "^7.1",
         "symfony/console": "^7.3",
@@ -24,5 +25,8 @@
             "Syntexa\\Core\\": "src/"
         }
     },
-    "bin": ["bin/syntexa"]
+    "bin": ["bin/syntexa"],
+    "extra": {
+        "class": "Syntexa\\Core\\Composer\\SyntexaPlugin"
+    }
 }

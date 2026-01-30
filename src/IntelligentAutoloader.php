@@ -216,7 +216,11 @@ class IntelligentAutoloader
         
         // First, check classes in classMap
         foreach (self::$classMap as $className => $filePath) {
-            
+            // Skip Composer plugin classes (only loaded by Composer, not by CLI)
+            if (str_starts_with($className, 'Syntexa\\Core\\Composer\\')) {
+                continue;
+            }
+
             // Load class if not already loaded
             if (!class_exists($className) && !interface_exists($className) && !trait_exists($className)) {
                 if (file_exists($filePath)) {

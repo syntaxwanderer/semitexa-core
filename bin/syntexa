@@ -7,8 +7,20 @@ declare(strict_types=1);
  * Syntexa CLI entry point (shipped with syntexa/core).
  * When installed via Composer, this is linked as vendor/bin/syntexa.
  */
-$autoload = dirname(__DIR__, 2) . '/autoload.php';
-if (!file_exists($autoload)) {
+$dir = __DIR__;
+$autoload = null;
+for ($i = 0; $i < 5; $i++) {
+    $candidate = $dir . '/vendor/autoload.php';
+    if (file_exists($candidate)) {
+        $autoload = $candidate;
+        break;
+    }
+    $dir = dirname($dir);
+    if ($dir === '/' || $dir === '') {
+        break;
+    }
+}
+if ($autoload === null || !file_exists($autoload)) {
     fwrite(STDERR, "Composer autoload not found. Run: composer install\n");
     exit(1);
 }
