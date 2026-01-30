@@ -14,6 +14,7 @@ use Syntexa\Core\Console\Command\LayoutGenerateCommand;
 use Syntexa\Core\Console\Command\QueueWorkCommand;
 use Syntexa\Core\Console\Command\UserCreateCommand;
 use Syntexa\Core\Console\Command\TestHandlerCommand;
+use Syntexa\Core\Console\Command\InitCommand;
 
 class Application extends SymfonyApplication
 {
@@ -22,6 +23,7 @@ class Application extends SymfonyApplication
         parent::__construct('Syntexa', '1.0.0');
         
         $commands = [
+            new InitCommand(),
             new ServerStartCommand(),
             new ServerStopCommand(),
             new ServerRestartCommand(),

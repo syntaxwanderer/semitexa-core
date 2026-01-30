@@ -23,5 +23,6 @@
         "psr-4": {
             "Syntexa\\Core\\": "src/"
         }
-    }
+    },
+    "bin": ["bin/syntexa"]
 }
