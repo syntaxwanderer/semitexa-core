@@ -15,7 +15,7 @@ use Symfony\Component\Process\Process;
 /**
  * Composer plugin: after install/update, if syntexa/core is installed:
  * - New project (missing server.php, AI_ENTRY.md, README.md, or docker-compose.yml): runs full "syntexa init".
- * - Existing project: runs "syntexa init --force" so all scaffolded files (server.php, docs, docker-compose, etc.) stay up to date. Use AI_NOTES.md for your own notes — it is never overwritten.
+ * - Existing project: runs "syntexa init --only-docs --force" so AI_ENTRY, README, docs/, server.php and .env.example stay up to date. .env is never touched. Use AI_NOTES.md for your own notes — it is never overwritten.
  */
 final class SyntexaPlugin implements PluginInterface, EventSubscriberInterface
 {
@@ -82,15 +82,15 @@ final class SyntexaPlugin implements PluginInterface, EventSubscriberInterface
             return;
         }
 
-        // Existing project: refresh all scaffolded files from template (server.php, docs, docker-compose, etc.)
-        $this->io->write('<info>Syntexa: refreshing project scaffold (syntexa init --force)...</info>');
-        $process = new Process([$php, $bin, 'init', '--force'], $root);
+        // Existing project: refresh docs + server.php + .env.example (never touch .env)
+        $this->io->write('<info>Syntexa: refreshing project docs and scaffold (syntexa init --only-docs)...</info>');
+        $process = new Process([$php, $bin, 'init', '--only-docs', '--force'], $root);
         $process->setTimeout(30);
         $process->run(function (string $type, string $buffer): void {
             $this->io->write($buffer, false);
         });
         if ($process->isSuccessful()) {
-            $this->io->write('<info>Syntexa: scaffold updated. Your own notes: AI_NOTES.md (never overwritten).</info>');
+            $this->io->write('<info>Syntexa: docs, server.php and .env.example updated. .env not touched. Your notes: AI_NOTES.md (never overwritten).</info>');
         }
     }
 }

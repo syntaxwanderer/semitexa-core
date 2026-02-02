@@ -169,6 +169,8 @@ class InitCommand extends Command
         $docFiles = [
             'AI_ENTRY.md' => $this->getAiEntryContent(),
             'README.md' => $this->getReadmeContent(),
+            'server.php' => $this->getServerPhpContent(),
+            '.env.example' => $this->getEnvExampleContent(),
             'docs/CONVENTIONS.md' => $this->getConventionsContent(),
             'docs/DEPENDENCIES.md' => $this->getDependenciesContent(),
             'docs/RUNNING.md' => $this->getRunningDocContent(),
@@ -201,8 +203,8 @@ class InitCommand extends Command
             $io->note('Skipped (exists): ' . $f . ' (use --force to overwrite)');
         }
 
-        $io->success('Docs updated. AI_ENTRY and project docs refreshed from framework template.');
-        $io->text('AI will now see current conventions (var/docs, ADDING_ROUTES, Twig for HTML).');
+        $io->success('Docs and scaffold updated. AI_ENTRY, README, docs/, server.php, .env.example refreshed from framework template.');
+        $io->text('.env is never touched. Copy new vars from .env.example to .env if needed.');
         return Command::SUCCESS;
     }
 
