@@ -5,6 +5,9 @@
 The `#[AsRequest]` attribute marks a class as an HTTP Request DTO (Data Transfer Object)  
 and defines the route, HTTP methods and other routing parameters.
 
+**Placement:** Request classes must live in **modules** (`src/modules/`, `packages/`, or `vendor/`).  
+Classes in project `src/` (namespace `App\`) are **not discovered** for routes — do not put new routes there. See [ADDING_ROUTES.md](../ADDING_ROUTES.md).
+
 ## Usage
 
 ```php

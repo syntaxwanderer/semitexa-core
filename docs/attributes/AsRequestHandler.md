@@ -5,6 +5,9 @@
 The `#[AsRequestHandler]` attribute marks a class as an HTTP Handler for a specific Request.  
 Such handlers are automatically discovered by the framework and invoked to process the corresponding Request.
 
+**Placement:** Handler classes must live in **modules** (`src/modules/`, `packages/`, or `vendor/`).  
+Classes in project `src/` (namespace `App\`) are **not discovered** for routes — do not put new routes there. See [ADDING_ROUTES.md](../ADDING_ROUTES.md).
+
 ## Usage
 
 ```php

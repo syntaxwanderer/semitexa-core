@@ -87,6 +87,7 @@ class InitCommand extends Command
             'docs/CONVENTIONS.md' => $this->getConventionsContent(),
             'docs/DEPENDENCIES.md' => $this->getDependenciesContent(),
             'docs/RUNNING.md' => $this->getRunningDocContent(),
+            'docs/ADDING_ROUTES.md' => $this->getAddingRoutesStubContent(),
             'src/Request/HomeRequest.php' => $this->getHomeRequestContent(),
             'src/Handler/HomeHandler.php' => $this->getHomeHandlerContent(),
             'tests/HomeTest.php' => $this->getHomeTestContent(),
@@ -173,8 +174,8 @@ class InitCommand extends Command
 
 - **bin/syntexa** – CLI
 - **public/** – web root
-- **src/** – application code (Request, Handler, Response; see docs/CONVENTIONS.md)
-- **src/modules/** – application modules
+- **src/** – application code; **new routes** go in **modules** (src/modules/), not in src/Request or src/Handler (App\ is not discovered for routes). See docs/CONVENTIONS.md and docs/ADDING_ROUTES.md.
+- **src/modules/** – application modules (where to add new pages and endpoints)
 - **var/log**, **var/cache** – runtime
 - **vendor/syntexa/** – framework packages
 
@@ -182,10 +183,12 @@ class InitCommand extends Command
 
 - **vendor/syntexa/core/docs/attributes/** – Request, Handler, Response attributes
 - **vendor/syntexa/core/docs/attributes/README.md** – attribute index
+- **vendor/syntexa/core/docs/ADDING_ROUTES.md** – how to add new pages/routes (modules only)
 
 ## Conventions & dependencies
 
-- **docs/CONVENTIONS.md** – namespace (App\), Request/Handler/Response placement, syntexa commands
+- **docs/CONVENTIONS.md** – namespace, Request/Handler only in modules, syntexa commands
+- **docs/ADDING_ROUTES.md** – new pages/routes = only via modules
 - **docs/DEPENDENCIES.md** – syntexa/core version, where to find official docs
 
 ## Quick start
@@ -227,9 +230,10 @@ Default URL: **http://0.0.0.0:9501** (configurable via `.env` `SWOOLE_PORT`). Se
 
 ## Structure
 
-- `src/Request/`, `src/Handler/` – example Request→Handler (GET /)
-- `src/modules/` – your modules
+- `src/Request/`, `src/Handler/` – example code only; **not** used for route discovery. New pages/routes go in **modules** (see docs/ADDING_ROUTES.md).
+- `src/modules/` – your modules (add new pages and endpoints here).
 - `docs/CONVENTIONS.md` – coding conventions
+- `docs/ADDING_ROUTES.md` – how to add new pages/routes (modules only)
 - `docs/DEPENDENCIES.md` – Syntexa version and docs
 - `AI_ENTRY.md` – entry point for AI assistants
 
@@ -244,10 +248,10 @@ MD;
         return <<<'MD'
 # Conventions
 
-- **Application namespace:** `App\`
-- **Request DTOs:** `src/Request/` or per-module under `src/modules/`; use `#[AsRequest(path: '...', methods: ['GET'])]`
-- **Handlers:** `src/Handler/` or per-module; use `#[AsRequestHandler(for: SomeRequest::class)]`; method `handle(RequestInterface $request, ResponseInterface $response): ResponseInterface`
-- **Response DTOs:** optional; or return `\Syntexa\Core\Response::json([...])` from handler
+- **Application namespace:** `App\` (for tests, helpers; **not** for routes — see below).
+- **Routes (Request/Handler):** **Only in modules** (`src/modules/`, `packages/`, or `vendor/`). Do **not** put new Request/Handler for pages or endpoints in project `src/Request/` or `src/Handler/` — they are **not** discovered. See **docs/ADDING_ROUTES.md** (or `vendor/syntexa/core/docs/ADDING_ROUTES.md`).
+- **Request/Handler in modules:** use `#[AsRequest(path: '...', methods: ['GET'])]` and `#[AsRequestHandler(for: SomeRequest::class)]`; handler method `handle(RequestInterface $request, ResponseInterface $response): ResponseInterface`.
+- **Response DTOs:** optional; or return `\Syntexa\Core\Response::json([...])` from handler.
 - **CLI:** `vendor/bin/syntexa` or `bin/syntexa` – `init`, `server:start`, `server:stop`, etc.
 - **Running:** Only via Docker: `bin/syntexa server:start` / `server:stop`. See docs/RUNNING.md.
 MD;
@@ -258,8 +262,9 @@ MD;
         return <<<'MD'
 # Syntexa dependencies
 
-- **syntexa/core** – see `composer.json` for version; framework docs in `vendor/syntexa/core/docs/` (attributes, RUNNING.md)
+- **syntexa/core** – see `composer.json` for version; framework docs in `vendor/syntexa/core/docs/` (attributes, RUNNING.md, ADDING_ROUTES.md)
 - Running: Docker only – see `docs/RUNNING.md` or `vendor/syntexa/core/docs/RUNNING.md`
+- New routes: only via modules – see `docs/ADDING_ROUTES.md` or `vendor/syntexa/core/docs/ADDING_ROUTES.md`
 - Official repo: check Packagist or GitHub for `syntexa/core`
 MD;
     }
@@ -546,6 +551,22 @@ The **only supported way** to run a Syntexa app is via Docker.
 - **Logs:** `docker compose logs -f`
 
 The app container runs `php server.php` inside Docker; the Swoole server listens on port 9501 (configurable via `.env` `SWOOLE_PORT`). Do not run `php server.php` on the host as the primary way to run the app.
+MD;
+    }
+
+    private function getAddingRoutesStubContent(): string
+    {
+        return <<<'MD'
+# Adding new pages and routes
+
+**New routes (pages, endpoints) in Syntexa are added only via modules.**  
+Request/Handler classes in project `src/Request/` or `src/Handler/` (namespace `App\`) are **not discovered** — do not add new routes there.
+
+- Create or use a **module** under `src/modules/{ModuleName}/` with a `composer.json` (`"type": "syntexa-module"` and PSR-4, e.g. `Syntexa\Modules\Website\` → `src/`).
+- Put Request and Handler classes in that module namespace; use `#[AsRequest]` and `#[AsRequestHandler]`.
+- Run `composer dump-autoload` in the project root after adding/changing a module.
+
+**Full guide:** `vendor/syntexa/core/docs/ADDING_ROUTES.md`
 MD;
     }
 }

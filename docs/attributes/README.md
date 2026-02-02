@@ -19,6 +19,8 @@ When framework docs live in `packages/syntexa/`, use a path relative to the **ap
 
 ## Available attributes
 
+Request/Handler classes must be in **modules** (`src/modules/`, `packages/`, or `vendor/`); classes in project `src/` (namespace `App\`) are **not** discovered for routes. See [ADDING_ROUTES.md](../ADDING_ROUTES.md).
+
 ### Core Attributes
 
 - [AsRequest](AsRequest.md) - HTTP Request DTO
