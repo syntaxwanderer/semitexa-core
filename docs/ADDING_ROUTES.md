@@ -81,8 +81,23 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
 
    Paths inside the module can follow your convention (e.g. `Application/Request/`, `Application/Handler/` or `Handler/`, `Request/`); the important part is that the class lives under the **module namespace** (`Syntexa\Modules\Website\...`) and the module has a valid `composer.json` with `"type": "syntexa-module"` and PSR-4 autoload.
 
+   The example above returns JSON. **For HTML pages** use a Response DTO with a Twig template — see the section **"Responses: JSON and HTML pages"** below (or AI_REFERENCE / guides in syntexa/docs).
+
 4. **Reload**  
    Restart the app (e.g. `bin/syntexa server:stop` then `bin/syntexa server:start`) or ensure your runtime picks up the new classes; the framework will discover the new Request/Handler from the module.
+
+---
+
+## Responses: JSON and HTML pages
+
+The step-by-step example above uses `Response::json([...])` — suitable for API endpoints. For **HTML pages** the framework recommends the **Response DTO + Twig** pattern:
+
+- Create a Response class with the attribute `#[AsResponse(template: 'path/to/file.html.twig')]`.
+- Store templates in the module under `Application/View/templates/` (or your project’s convention).
+- The Handler fills the response context and returns the Response DTO; the framework renders the Twig template.
+- The **core-frontend** package provides Twig integration and layouts.
+
+**Detailed docs:** in the **syntexa/docs** package — sections on Request/Response/Handler and Twig/templates. When installed: `vendor/syntexa/docs/AI_REFERENCE.md`, `vendor/syntexa/docs/guides/CONVENTIONS.md`, `vendor/syntexa/docs/guides/EXAMPLES.md`. Do not put raw HTML in the Handler — use Response DTO + Twig.
 
 ---
 

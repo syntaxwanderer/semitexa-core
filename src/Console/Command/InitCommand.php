@@ -177,6 +177,7 @@ class InitCommand extends Command
 - **src/** – application code; **new routes** go in **modules** (src/modules/), not in src/Request or src/Handler (App\ is not discovered for routes). See docs/CONVENTIONS.md and docs/ADDING_ROUTES.md.
 - **src/modules/** – application modules (where to add new pages and endpoints)
 - **var/log**, **var/cache** – runtime
+- **var/docs/** – working directory for AI: temporary notes, refactor plans, draft docs. Content not committed (`.gitignore`).
 - **vendor/syntexa/** – framework packages
 
 ## Framework docs (in vendor)
@@ -232,6 +233,7 @@ Default URL: **http://0.0.0.0:9501** (configurable via `.env` `SWOOLE_PORT`). Se
 
 - `src/Request/`, `src/Handler/` – example code only; **not** used for route discovery. New pages/routes go in **modules** (see docs/ADDING_ROUTES.md).
 - `src/modules/` – your modules (add new pages and endpoints here).
+- `var/docs/` – working directory for temporary/intermediate files (e.g. AI notes, plans, drafts); not committed.
 - `docs/CONVENTIONS.md` – coding conventions
 - `docs/ADDING_ROUTES.md` – how to add new pages/routes (modules only)
 - `docs/DEPENDENCIES.md` – Syntexa version and docs
