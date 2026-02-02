@@ -13,8 +13,9 @@ use Composer\Script\ScriptEvents;
 use Symfony\Component\Process\Process;
 
 /**
- * Composer plugin: after install/update, if syntexa/core is installed and project
- * has no server.php yet, runs "syntexa init" to scaffold the project structure.
+ * Composer plugin: after install/update, if syntexa/core is installed, runs "syntexa init"
+ * when project has no server.php yet, or when AI_ENTRY.md / README.md are missing
+ * (so existing projects get these files after updating the package).
  */
 final class SyntexaPlugin implements PluginInterface, EventSubscriberInterface
 {
@@ -55,11 +56,15 @@ final class SyntexaPlugin implements PluginInterface, EventSubscriberInterface
         $vendorDir = $config->get('vendor-dir');
         $root = \dirname($vendorDir);
 
-        if (file_exists($root . '/server.php')) {
+        $needsInit = !file_exists($root . '/server.php')
+            || !file_exists($root . '/AI_ENTRY.md')
+            || !file_exists($root . '/README.md');
+
+        if (!$needsInit) {
             return;
         }
 
-        $this->io->write('<info>Syntexa: scaffolding project structure (syntexa init)...</info>');
+        $this->io->write('<info>Syntexa: scaffolding / updating project structure (syntexa init)...</info>');
 
         $bin = $vendorDir . '/bin/syntexa';
         if (!file_exists($bin)) {
