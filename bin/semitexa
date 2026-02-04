@@ -4,8 +4,8 @@
 declare(strict_types=1);
 
 /**
- * Syntexa CLI entry point (shipped with syntexa/core).
- * When installed via Composer, this is linked as vendor/bin/syntexa.
+ * Semitexa CLI entry point (shipped with semitexa/core).
+ * When installed via Composer, this is linked as vendor/bin/semitexa.
  */
 $dir = __DIR__;
 $autoload = null;
@@ -26,8 +26,8 @@ if ($autoload === null || !file_exists($autoload)) {
 }
 require_once $autoload;
 
-use Syntexa\Core\Discovery\AttributeDiscovery;
-use Syntexa\Core\Console\Application;
+use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Console\Application;
 
 AttributeDiscovery::initialize();
 $application = new Application();
