@@ -15,6 +15,8 @@ use Semitexa\Core\Console\Command\QueueWorkCommand;
 use Semitexa\Core\Console\Command\UserCreateCommand;
 use Semitexa\Core\Console\Command\TestHandlerCommand;
 use Semitexa\Core\Console\Command\InitCommand;
+use Semitexa\Core\Console\Command\ContractsListCommand;
+use Semitexa\Core\Console\Command\CacheClearCommand;
 
 class Application extends SymfonyApplication
 {
@@ -24,6 +26,8 @@ class Application extends SymfonyApplication
         
         $commands = [
             new InitCommand(),
+            new ContractsListCommand(),
+            new CacheClearCommand(),
             new ServerStartCommand(),
             new ServerStopCommand(),
             new ServerRestartCommand(),

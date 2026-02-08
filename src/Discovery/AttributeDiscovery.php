@@ -78,8 +78,15 @@ class AttributeDiscovery
      */
     public static function findRoute(string $path, string $method = 'GET'): ?array
     {
+        // Normalize root path so '' and '/' match the same route
+        if ($path === '') {
+            $path = '/';
+        }
         foreach (self::$routes as $route) {
             $routePath = $route['path'];
+            if ($routePath === '') {
+                $routePath = '/';
+            }
             $routeMethods = $route['methods'] ?? [$route['method'] ?? 'GET'];
             
             // Exact match

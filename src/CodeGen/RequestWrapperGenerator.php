@@ -191,7 +191,7 @@ class RequestWrapperGenerator
     {
         $projectRoot = dirname(__DIR__, 5);
         $moduleStudly = $target['module']['studly'] ?? 'Project';
-        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Payload';
+        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Application/Payload';
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0777, true);
         }
@@ -398,7 +398,7 @@ PHP;
             ? substr($responseClass, strrpos($responseClass, '\\') + 1)
             : $responseClass;
 
-        $wrapperPath = $projectRoot . '/src/modules/' . $moduleStudly . '/Resource/' . $short . '.php';
+        $wrapperPath = $projectRoot . '/src/modules/' . $moduleStudly . '/Application/Resource/' . $short . '.php';
         if (is_file($wrapperPath)) {
             return '\\Semitexa\\Modules\\' . $moduleStudly . '\\Resource\\' . $short;
         }

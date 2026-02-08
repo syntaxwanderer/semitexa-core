@@ -283,14 +283,18 @@ class IntelligentAutoloader
     }
     
     /**
-     * Get project root directory
+     * Get project root directory (walk up until composer.json + src/modules found)
      */
     private static function getProjectRoot(): string
     {
-        $currentDir = __DIR__;
-        
-        // Go up from vendor/semitexa/core/src/ to project root
-        return dirname($currentDir, 4);
+        $dir = __DIR__;
+        while ($dir !== '/' && $dir !== '') {
+            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
+                return $dir;
+            }
+            $dir = dirname($dir);
+        }
+        return dirname(__DIR__, 4);
     }
     
     /**

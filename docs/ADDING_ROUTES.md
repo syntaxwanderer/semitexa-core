@@ -19,18 +19,19 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
      "type": "semitexa-module",
      "autoload": {
        "psr-4": {
-         "Semitexa\\Modules\\Website\\": "src/"
+         "Semitexa\\Modules\\Website\\": "."
        }
      }
    }
    ```
+   (Project root `composer.json` uses a single mapping `"Semitexa\\Modules\\": "src/modules/"` for all modules.)
 
    Run `composer dump-autoload` in the **project root** after adding or changing module `composer.json`.
 
 3. **Create Request and Handler in the module namespace**  
    Use namespace `Semitexa\Modules\{ModuleName}\...`, e.g. `Semitexa\Modules\Website\Application\Request\HomeRequest` and `Semitexa\Modules\Website\Application\Handler\HomeHandler`.
 
-   **Example Request** — e.g. `src/modules/Website/src/Application/Request/HomeRequest.php`:
+   **Example Request** — e.g. `src/modules/Website/Application/Request/HomeRequest.php`:
 
    ```php
    <?php
@@ -52,7 +53,7 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
    }
    ```
 
-   **Example Handler** — e.g. `src/modules/Website/src/Application/Handler/HomeHandler.php`:
+   **Example Handler** — e.g. `src/modules/Website/Application/Handler/HomeHandler.php`:
 
    ```php
    <?php
@@ -122,7 +123,7 @@ Place **all new routes** in a module (existing or new) under `src/modules/`, in 
 
 - **ModuleRegistry** finds modules in: `src/modules/`, project `packages/`, and `vendor/` (packages with `type: semitexa-module` or under `vendor/semitexa/`).
 - **IntelligentAutoloader** and **AttributeDiscovery** load and scan only classes from those module namespaces (e.g. `Semitexa\Modules\*`, package namespaces). They do **not** scan the project `App\` namespace under `src/` for routes.
-- So to add new routes you must have a **module** with a proper `composer.json` and PSR-4 mapping (e.g. `Semitexa\Modules\Website\` → `src/`). Adding `App\Request\*` / `App\Handler\*` in project `src/` is not a supported way to register routes.
+- So to add new routes you must have a **module** with a proper `composer.json` and PSR-4 (root: `Semitexa\Modules\` → `src/modules/`; per-module e.g. `Semitexa\Modules\Website\` → `.`). Adding `App\Request\*` / `App\Handler\*` in project `src/` is not a supported way to register routes.
 
 ---
 
@@ -142,4 +143,4 @@ Do not patch vendor. The supported way to add routes is via modules; changing fr
 
 - **New pages/routes = only via modules** (`src/modules/`, `packages/`, or `vendor/`).
 - **Never** add new routes as `App\Request\*` / `App\Handler\*` in project `src/Request/` or `src/Handler/`.
-- Each module: directory, `composer.json` with `"type": "semitexa-module"` and PSR-4 (e.g. `Semitexa\Modules\Website\` → `src/`), then Request/Handler classes with `#[AsRequest]` and `#[AsRequestHandler]` in that namespace.
+- Each module: directory, `composer.json` with `"type": "semitexa-module"` and PSR-4 (e.g. `Semitexa\Modules\Website\` → `.`); root has `Semitexa\Modules\` → `src/modules/`. Then Request/Handler classes with `#[AsRequest]` and `#[AsRequestHandler]` in that namespace.

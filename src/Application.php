@@ -88,9 +88,14 @@ class Application
             return $this->handleRoute($route, $request);
         }
         
-        // Fallback to simple routing
+        // For root path, try alternate form ('' vs '/') in case discovery registered the other
         $path = $request->getPath();
         if ($path === '/' || $path === '') {
+            $altPath = $path === '/' ? '' : '/';
+            $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
+            if ($route) {
+                return $this->handleRoute($route, $request);
+            }
             return $this->helloWorld($request);
         }
 

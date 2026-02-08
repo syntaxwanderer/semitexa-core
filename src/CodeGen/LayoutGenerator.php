@@ -79,7 +79,7 @@ class LayoutGenerator
             if ($modulePath === null) {
                 continue;
             }
-            $layoutDir = rtrim($modulePath, '/') . '/src/Application/View/templates/layout';
+            $layoutDir = rtrim($modulePath, '/') . '/Application/View/templates/layout';
             if (!is_dir($layoutDir)) {
                 continue;
             }
@@ -100,7 +100,7 @@ class LayoutGenerator
                     'module' => $moduleName,
                     'moduleStudly' => $studly,
                     'source' => $file,
-                    'destination' => $projectRoot . '/src/modules/' . $studly . '/Layout/' . basename($file),
+                    'destination' => $projectRoot . '/src/modules/' . $studly . '/Application/View/templates/layout/' . basename($file),
                 ];
             }
         }

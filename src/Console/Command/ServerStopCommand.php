@@ -9,45 +9,56 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Process\Process;
 
 class ServerStopCommand extends BaseCommand
 {
     protected function configure(): void
     {
         $this->setName('server:stop')
-            ->setDescription('Stop Swoole HTTP server')
-            ->addOption('port', 'p', InputOption::VALUE_OPTIONAL, 'Port to stop', '9501');
+            ->setDescription('Stop Swoole HTTP server (Docker or local process)')
+            ->addOption('port', 'p', InputOption::VALUE_OPTIONAL, 'Port to stop (used when not using Docker). Default: from .env SWOOLE_PORT');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
-        $port = $input->getOption('port');
-        
-        $io->title("Stopping Semitexa on port {$port}...");
-
         $rootDir = $this->getProjectRoot();
+        $port = $input->getOption('port');
+        if ($port === null || $port === '') {
+            $port = $this->getPortFromEnv($rootDir);
+        }
+
+        $io->title('Stopping Semitexa...');
+
+        // 1. If started via Docker (server:start), stop containers first
+        $composeFile = $rootDir . '/docker-compose.yml';
+        if (file_exists($composeFile)) {
+            $io->section('Stopping Docker containers (docker compose down)...');
+            $process = new Process(['docker', 'compose', 'down'], $rootDir);
+            $process->setTimeout(30);
+            $process->run(function (string $type, string $buffer) use ($io): void {
+                $io->write($buffer);
+            });
+            if ($process->isSuccessful()) {
+                $io->success('Containers stopped.');
+            } else {
+                $io->warning('docker compose down failed or not available. Trying port/PID cleanup.');
+            }
+        }
+
+        // 2. Stop by PID file (when server was started as php server.php and wrote PID)
         $pidFile = $rootDir . '/var/swoole.pid';
-        
         if (file_exists($pidFile)) {
-            $pid = trim(file_get_contents($pidFile));
-            if ($pid) {
-                if (function_exists('posix_kill') && posix_kill((int)$pid, 0)) {
-                    $io->text("Master PID: {$pid}");
-                    posix_kill((int)$pid, SIGTERM);
-                    sleep(1);
-                    if (posix_kill((int)$pid, 0)) {
-                        posix_kill((int)$pid, SIGKILL);
-                    }
-                } else {
-                    // Fallback to shell command
-                    exec("kill -TERM {$pid} 2>/dev/null || kill -9 {$pid} 2>/dev/null");
-                }
+            $pid = trim((string) file_get_contents($pidFile));
+            if ($pid !== '' && ctype_digit($pid)) {
+                $io->text("Stopping process from PID file: {$pid}");
+                $this->killPid((int) $pid);
             }
             @unlink($pidFile);
         }
 
-        // Kill all processes on port
+        // 3. Kill any process still listening on the port (e.g. leftover or non-Docker run)
         $attempts = 0;
         while ($attempts < 5) {
             $pids = $this->getPidsOnPort($port);
@@ -62,11 +73,7 @@ class ServerStopCommand extends BaseCommand
 
             $io->text("PIDs on port {$port}: " . implode(', ', $pids));
             foreach ($pids as $pid) {
-                if (function_exists('posix_kill')) {
-                    posix_kill($pid, SIGTERM);
-                } else {
-                    exec("kill -TERM {$pid} 2>/dev/null");
-                }
+                $this->killPid($pid);
             }
             sleep(1);
 
@@ -74,25 +81,43 @@ class ServerStopCommand extends BaseCommand
             if (empty($pids)) {
                 break;
             }
-
             foreach ($pids as $pid) {
-                if (function_exists('posix_kill')) {
-                    posix_kill($pid, SIGKILL);
-                } else {
-                    exec("kill -9 {$pid} 2>/dev/null");
-                }
+                $this->killPid($pid, true);
             }
             sleep(1);
             $attempts++;
         }
 
-        if ($attempts >= 5) {
-            $io->warning("Unable to terminate all processes after {$attempts} attempts.");
+        if ($attempts >= 5 && !empty($this->getPidsOnPort($port))) {
+            $io->warning("Unable to terminate all processes on port {$port} after 5 attempts.");
             return Command::FAILURE;
         }
 
-        $io->success("Stopped.");
+        $io->success('Stopped.');
         return Command::SUCCESS;
+    }
+
+    private function getPortFromEnv(string $rootDir): string
+    {
+        $envFile = $rootDir . '/.env';
+        if (file_exists($envFile)) {
+            $content = (string) file_get_contents($envFile);
+            if (preg_match('/^\s*SWOOLE_PORT\s*=\s*(\d+)/m', $content, $m)) {
+                return $m[1];
+            }
+        }
+        return '9501';
+    }
+
+    private function killPid(int $pid, bool $force = false): void
+    {
+        $sig = $force ? SIGKILL : SIGTERM;
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, $sig);
+        } else {
+            $opt = $force ? '-9' : '-TERM';
+            exec("kill {$opt} {$pid} 2>/dev/null");
+        }
     }
 
     private function getPidsOnPort(string $port): array

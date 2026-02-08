@@ -67,26 +67,15 @@ class AutoloaderGenerator
     }
     
     /**
-     * Scan src/modules/* directories
+     * Scan src/modules/* — single PSR-4 prefix for all modules (Semitexa\Modules\ => src/modules/).
      */
     private static function scanLocalModules(): array
     {
-        $mappings = [];
         $modulesPath = self::getProjectRoot() . '/src/modules';
-        
-        if (!is_dir($modulesPath)) {
-            return $mappings;
+        if (!is_dir($modulesPath) || empty(glob($modulesPath . '/*', GLOB_ONLYDIR))) {
+            return [];
         }
-        
-        $modules = glob($modulesPath . '/*', GLOB_ONLYDIR);
-        
-        foreach ($modules as $module) {
-            $moduleName = basename($module);
-            $namespace = "Semitexa\\Modules\\" . ucfirst($moduleName) . "\\";
-            $mappings[$namespace] = "src/modules/{$moduleName}/";
-        }
-        
-        return $mappings;
+        return ['Semitexa\\Modules\\' => 'src/modules/'];
     }
     
     /**
@@ -166,28 +155,26 @@ class AutoloaderGenerator
     }
     
     /**
-     * Update composer.json with generated mappings
+     * Update composer.json: merge generated mappings with existing psr-4 (preserves App\, App\Tests\, etc.).
      */
     public static function updateComposerJson(): void
     {
         $mappings = self::generate();
         $composerJsonPath = self::getProjectRoot() . '/composer.json';
-        
+
         if (!file_exists($composerJsonPath)) {
             throw new \RuntimeException('composer.json not found');
         }
-        
+
         $composer = json_decode(file_get_contents($composerJsonPath), true);
-        
-        // Update autoload section
-        $composer['autoload']['psr-4'] = $mappings;
-        
-        // Write back to file
+        $existing = $composer['autoload']['psr-4'] ?? [];
+        $composer['autoload']['psr-4'] = array_merge($existing, $mappings);
+
         file_put_contents(
             $composerJsonPath,
             json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
         );
-        
-        echo "✅ Updated composer.json with " . count($mappings) . " PSR-4 mappings\n";
+
+        echo "✅ Updated composer.json with " . count($mappings) . " PSR-4 mapping(s) (merged with existing)\n";
     }
 }

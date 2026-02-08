@@ -209,13 +209,16 @@ class InitCommand extends Command
         }
         $psr4['App\\'] = 'src/';
         $psr4['App\\Tests\\'] = 'tests/';
+        if (!isset($psr4['Semitexa\\Modules\\'])) {
+            $psr4['Semitexa\\Modules\\'] = 'src/modules/';
+        }
         $json['autoload'] = array_merge($autoload, ['psr-4' => $psr4]);
         $encoded = json_encode($json, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         if ($encoded === false) {
             return;
         }
         if (file_put_contents($path, $encoded) !== false) {
-            $io->text('Updated composer.json: autoload.psr-4 "App\\": "src/", "App\\Tests\\": "tests/"');
+            $io->text('Updated composer.json: autoload.psr-4 "App\\": "src/", "App\\Tests\\": "tests/", "Semitexa\\Modules\\": "src/modules/"');
         }
     }
 
@@ -232,7 +235,7 @@ class InitCommand extends Command
 - **bin/semitexa** – CLI
 - **public/** – web root
 - **src/** – application code; **new routes** go in **modules** (src/modules/), not in src/Request or src/Handler (App\ is not discovered for routes).
-- **src/modules/** – application modules (where to add new pages and endpoints)
+- **src/modules/** – application modules (where to add new pages and endpoints). **Do not add per-module PSR-4 entries to composer.json** – the framework autoloads all modules from src/modules/ via IntelligentAutoloader at runtime.
 - **var/log**, **var/cache** – runtime
 - **var/docs/** – working directory for AI only: temporary notes, plans, drafts. Content not committed (`.gitignore`). **Do not create or use a docs/ folder in the project root.**
 - **AI_NOTES.md** – your own notes for AI (created once, never overwritten by the framework).
@@ -244,7 +247,20 @@ class InitCommand extends Command
 - **vendor/semitexa/core/docs/ADDING_ROUTES.md** – how to add new pages/routes (modules only)
 - **vendor/semitexa/core/docs/RUNNING.md** – how to run the app (Docker)
 - **vendor/semitexa/core/docs/attributes/** – Request, Handler, Response attributes
+- **vendor/semitexa/core/docs/SERVICE_CONTRACTS.md** – service contracts, active implementation, and **contracts:list** command
 - **vendor/semitexa/docs/README.md** – package map; **vendor/semitexa/docs/guides/CONVENTIONS.md** – conventions (when semitexa/docs is installed)
+
+## Debugging: service contracts (for AI agents and developers)
+
+To see **which interface is bound to which implementation** (and which implementation is active when several modules provide one):
+
+```bash
+bin/semitexa contracts:list
+```
+
+Table: Contract (interface) | Implementations (module → class) | Active. Use when debugging DI or after adding/removing modules.
+
+**For AI agents:** use `bin/semitexa contracts:list --json` for stable, parseable output. See vendor/semitexa/core/docs/SERVICE_CONTRACTS.md for details.
 
 ## Quick start
 
@@ -328,6 +344,7 @@ All framework documentation lives in `vendor/` (installed with Composer). Open t
 | **Running the app** — Docker, ports, logs | [vendor/semitexa/core/docs/RUNNING.md](vendor/semitexa/core/docs/RUNNING.md) |
 | **Adding pages and routes** — modules, Request/Handler | [vendor/semitexa/core/docs/ADDING_ROUTES.md](vendor/semitexa/core/docs/ADDING_ROUTES.md) |
 | **Attributes** — AsPayload, AsPayloadHandler, AsResource, etc. | [vendor/semitexa/core/docs/attributes/README.md](vendor/semitexa/core/docs/attributes/README.md) |
+| **Service contracts** — contracts:list, active implementation | [vendor/semitexa/core/docs/SERVICE_CONTRACTS.md](vendor/semitexa/core/docs/SERVICE_CONTRACTS.md) |
 | **Package map & conventions** (if semitexa/docs is installed) | [vendor/semitexa/docs/README.md](vendor/semitexa/docs/README.md) · [vendor/semitexa/docs/guides/CONVENTIONS.md](vendor/semitexa/docs/guides/CONVENTIONS.md) |
 
 In your editor you can open these paths directly (e.g. Ctrl+P → paste path). No `docs/` folder in the project root — everything is in vendor.

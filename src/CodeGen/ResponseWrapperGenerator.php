@@ -210,7 +210,7 @@ class ResponseWrapperGenerator
     {
         $projectRoot = dirname(__DIR__, 5);
         $moduleStudly = $target['module']['studly'] ?? 'Project';
-        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Resource';
+        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Application/Resource';
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0777, true);
         }

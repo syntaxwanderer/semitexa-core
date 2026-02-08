@@ -128,7 +128,63 @@ class ModuleRegistry
         }
         return 'observer';
     }
-    
+
+    /**
+     * Return module name (e.g. "Website") for a class in that module's namespace, or null.
+     */
+    public static function getModuleNameForClass(string $className): ?string
+    {
+        self::initialize();
+        $className = ltrim($className, '\\');
+        foreach (self::$modules as $module) {
+            $ns = ($module['namespace'] ?? '');
+            if ($ns !== '' && str_starts_with($className, $ns . '\\')) {
+                return $module['name'];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Module names ordered by "extends" (most derived first). Used for contract resolution priority.
+     * If A extends B, A appears before B so that A's implementation wins over B's.
+     *
+     * @return list<string>
+     */
+    public static function getModuleOrderByExtends(): array
+    {
+        self::initialize();
+        $names = array_keys(array_column(self::$modules, null, 'name'));
+        $edges = [];
+        foreach (self::$modules as $module) {
+            $parent = $module['extends'] ?? null;
+            if ($parent !== null && $parent !== '') {
+                $edges[$module['name']] = $parent;
+            }
+        }
+        $inDegree = array_fill_keys($names, 0);
+        foreach ($edges as $child => $parent) {
+            if (isset($inDegree[$parent])) {
+                $inDegree[$parent]++;
+            }
+        }
+        $queue = array_keys(array_filter($inDegree, fn(int $d): bool => $d === 0));
+        $order = [];
+        while ($queue !== []) {
+            $n = array_shift($queue);
+            $order[] = $n;
+            foreach ($edges as $c => $p) {
+                if ($c === $n && isset($inDegree[$p])) {
+                    $inDegree[$p]--;
+                    if ($inDegree[$p] === 0) {
+                        $queue[] = $p;
+                    }
+                }
+            }
+        }
+        return $order;
+    }
+
     /**
      * Discover all modules
      */
@@ -203,7 +259,7 @@ class ModuleRegistry
         $meta = self::readComposerMeta($path);
 
         // Default template path inside module
-        $defaultTemplatePath = $path . '/src/Application/View/templates';
+        $defaultTemplatePath = $path . '/Application/View/templates';
 
         // Aliases
         $aliases = [];
@@ -252,6 +308,7 @@ class ModuleRegistry
             'composerType' => $composerType,
             'aliases' => $aliases,
             'templatePaths' => $templatePaths,
+            'extends' => $meta['extends'] ?? null,
             'controllers' => self::findControllers($path, $namespace),
             'routes' => self::findRoutes($path, $namespace),
             'autoloadPsr4' => self::resolveAutoloadPsr4($path, $meta['autoload_psr4'] ?? []),
@@ -279,7 +336,8 @@ class ModuleRegistry
         $meta = [
             'template_alias' => null,
             'template_paths' => [],
-            'autoload_psr4' => []
+            'autoload_psr4' => [],
+            'extends' => null,
         ];
         $composerJson = $modulePath . '/composer.json';
         if (!is_file($composerJson)) {
@@ -293,6 +351,9 @@ class ModuleRegistry
             }
             if (!empty($extra['template_paths']) && is_array($extra['template_paths'])) {
                 $meta['template_paths'] = $extra['template_paths'];
+            }
+            if (isset($extra['extends']) && is_string($extra['extends']) && $extra['extends'] !== '') {
+                $meta['extends'] = $extra['extends'];
             }
             if (!empty($json['autoload']['psr-4']) && is_array($json['autoload']['psr-4'])) {
                 $meta['autoload_psr4'] = $json['autoload']['psr-4'];
@@ -359,12 +420,11 @@ class ModuleRegistry
      */
     private static function findModuleConfig(string $path, string $namespace): array
     {
-        $configFiles = glob($path . '/**/ModuleConfig.php');
-        if (empty($configFiles)) {
-            // Fallback: search any file for AsModule if no ModuleConfig.php found?
-            // No, let's stick to the convention for efficiency
-            $configFiles = glob($path . '/src/ModuleConfig.php');
-        }
+        $configFiles = array_merge(
+            glob($path . '/ModuleConfig.php') ?: [],
+            glob($path . '/**/ModuleConfig.php') ?: []
+        );
+        $configFiles = array_values(array_filter($configFiles, 'is_file'));
 
         foreach ($configFiles as $file) {
             $content = file_get_contents($file);
@@ -484,13 +544,17 @@ class ModuleRegistry
     }
     
     /**
-     * Get project root directory
+     * Get project root directory (walk up until composer.json + src/modules found)
      */
     private static function getProjectRoot(): string
     {
-        $currentDir = __DIR__;
-        
-        // Go up from vendor/semitexa/core/src/ to project root
-        return dirname($currentDir, 4);
+        $dir = __DIR__;
+        while ($dir !== '/' && $dir !== '') {
+            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
+                return $dir;
+            }
+            $dir = dirname($dir);
+        }
+        return dirname(__DIR__, 4);
     }
 }

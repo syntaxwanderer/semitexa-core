@@ -206,7 +206,13 @@ class ContainerFactory
         // $definitions[\Semitexa\Core\Database\ConnectionPool::class] = \DI\create()
         //     ->constructor(\DI\get('db.config'));
 
-        // Apply service overrides from project src (#[Overrides(CurrentHead::class)]); strict chain
+        // Service contracts from #[AsServiceContract(of: …)] on implementation classes (resolution by module extends)
+        $contractRegistry = new ServiceContractRegistry();
+        foreach ($contractRegistry->getContracts() as $contract => $impl) {
+            $definitions[$contract] = \DI\autowire($impl);
+        }
+
+        // Apply service overrides from project src (#[Overrides(CurrentHead::class)]); only non-contract services
         $overridableDefaults = [];
         if (interface_exists($userRepoInterface) && class_exists($userRepoDefault)) {
             $overridableDefaults[$userRepoInterface] = $userRepoDefault;
