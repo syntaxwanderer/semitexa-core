@@ -14,6 +14,9 @@ use Semitexa\Core\ModuleRegistry;
 class RequestWrapperGenerator
 {
     private const PROJECT_SRC = '/src/';
+    /** All generated wrappers (base + all AsPayloadPart traits from any module) go here. */
+    private const REGISTRY_NAMESPACE = 'App\\Registry\\Payloads';
+    private const REGISTRY_PAYLOADS_DIR = 'src/registry/Payloads';
     private static bool $bootstrapped = false;
     private static array $cachedDefinitions = [];
 
@@ -34,25 +37,20 @@ class RequestWrapperGenerator
     }
 
     /**
-     * Generate wrappers for every available request definition (excluding project-local wrappers).
+     * Generate wrappers for every request into src/registry/Payloads/ (base + all AsPayloadPart traits). Base modules are never modified.
      */
     public static function generateAll(): void
     {
         $requests = self::bootstrapDefinitions();
         $total = 0;
-
         foreach ($requests as $target) {
-            if (self::isProjectFile($target['file'] ?? '')) {
-                continue;
-            }
             self::generateWrapper($target);
             $total++;
         }
-
         if ($total === 0) {
-            echo "ℹ️  No external requests found to generate.\n";
+            echo "ℹ️  No requests found to generate.\n";
         } else {
-            echo "✨ Generated {$total} request wrapper(s).\n";
+            echo "✨ Generated {$total} request wrapper(s) in " . self::REGISTRY_PAYLOADS_DIR . "/.\n";
         }
     }
 
@@ -98,6 +96,14 @@ class RequestWrapperGenerator
     private static function collectRequestParts(string $baseClass): array
     {
         $parts = [];
+        // Ensure base class is loaded before we load trait files that reference it (e.g. base: ContactFormRequest::class).
+        // Otherwise trait files may be loaded first (e.g. FeatureShowcase before Website) and fail with "class not found".
+        if (!class_exists($baseClass)) {
+            $classMap = IntelligentAutoloader::getClassMap();
+            if (isset($classMap[$baseClass]) && file_exists($classMap[$baseClass])) {
+                require_once $classMap[$baseClass];
+            }
+        }
         $classes = IntelligentAutoloader::findClassesWithAttribute(AsPayloadPart::class);
 
         foreach ($classes as $className) {
@@ -109,7 +115,7 @@ class RequestWrapperGenerator
             foreach ($attributes as $attribute) {
                 /** @var AsPayloadPart $meta */
                 $meta = $attribute->newInstance();
-                if ($meta->base === $baseClass) {
+                if (ltrim($meta->base, '\\') === ltrim($baseClass, '\\')) {
                     $parts[] = [
                         'trait' => $className,
                         'file' => $reflection->getFileName() ?: '',
@@ -178,20 +184,31 @@ class RequestWrapperGenerator
         return $default;
     }
 
+    private static function getProjectRoot(): string
+    {
+        $dir = __DIR__;
+        while ($dir !== '' && $dir !== '/') {
+            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
+                return $dir;
+            }
+            $dir = dirname($dir);
+        }
+        return dirname(__DIR__, 4);
+    }
+
     private static function isProjectFile(?string $file): bool
     {
         if ($file === null || $file === '') {
             return false;
         }
-        $projectRoot = dirname(__DIR__, 5);
+        $projectRoot = self::getProjectRoot();
         return str_starts_with($file, $projectRoot . '/src/');
     }
 
     private static function writeWrapper(array $target, array $parts): void
     {
-        $projectRoot = dirname(__DIR__, 5);
-        $moduleStudly = $target['module']['studly'] ?? 'Project';
-        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Application/Payload';
+        $projectRoot = self::getProjectRoot();
+        $outputDir = $projectRoot . '/' . self::REGISTRY_PAYLOADS_DIR;
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0777, true);
         }
@@ -208,7 +225,6 @@ class RequestWrapperGenerator
         }
 
         $finalTraits = array_keys($traitList);
-
         $content = self::renderTemplate($target, $finalTraits);
         file_put_contents($outputFile, $content);
 
@@ -246,15 +262,16 @@ class RequestWrapperGenerator
         $imports = [];
         $usedAliases = [];
 
+        // Wrappers are written to the composition module (App). They have base + traits; route is resolved from base.
         $baseAlias = self::registerImport(
             $target['class'],
             $imports,
             $usedAliases,
             self::buildVendorAlias($target['class'], 'Base')
         );
-
         $attrParts = [
             "base: {$baseAlias}::class",
+            "overrides: {$baseAlias}::class",
         ];
 
         $responseClass = $target['attr']->responseWith ?? null;
@@ -273,54 +290,15 @@ class RequestWrapperGenerator
         );
         $traitBlock = empty($traitLines) ? '' : "\n" . implode("\n", $traitLines) . "\n";
 
-        // Check if base class implements interfaces - if so, don't duplicate them in wrapper
-        $baseClass = $target['class'];
-        $baseInterfaces = [];
-        try {
-            $baseReflection = new ReflectionClass($baseClass);
-            $baseInterfaces = $baseReflection->getInterfaceNames();
-        } catch (\Throwable $e) {
-            // Ignore if base class can't be reflected
-        }
-
-        // Wrapper should NOT extend base class - use traits only (consistent with LoginApiRequest pattern)
-        // Check if base class has any methods beyond traits
-        $baseHasOwnMethods = false;
-        try {
-            $baseReflection = new ReflectionClass($baseClass);
-            $baseMethods = $baseReflection->getMethods(\ReflectionMethod::IS_PUBLIC | \ReflectionMethod::IS_PROTECTED);
-            $baseTraits = $baseReflection->getTraitNames();
-            // Check if there are methods not from traits
-            foreach ($baseMethods as $method) {
-                if ($method->getDeclaringClass()->getName() === $baseClass) {
-                    // Check if this method is not from a trait
-                    $declaringTrait = null;
-                    foreach ($baseTraits as $traitName) {
-                        if (method_exists($traitName, $method->getName())) {
-                            $declaringTrait = $traitName;
-                            break;
-                        }
-                    }
-                    if (!$declaringTrait) {
-                        $baseHasOwnMethods = true;
-                        break;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // If we can't reflect, assume no own methods
-        }
-
-        // Always implement RequestInterface in wrapper (consistent pattern)
         $implements = [];
         $requestInterfaceFqn = 'Semitexa\\Core\\Contract\\RequestInterface';
         $implements[] = self::registerImport($requestInterfaceFqn, $imports, $usedAliases);
         $implementsString = ' implements ' . implode(', ', $implements);
 
-        // Only extend if base class has own methods (not just traits)
-        $extendsString = $baseHasOwnMethods ? "extends {$baseAlias}" : '';
+        // Wrapper extends base so the handler (bound to base class) receives this request.
+        $extendsString = " extends {$baseAlias}";
 
-        $namespace = 'Semitexa\\Modules\\' . ($target['module']['studly'] ?? 'Project') . '\\Payload';
+        $namespace = self::REGISTRY_NAMESPACE;
         $className = $target['short'];
 
         $header = <<<'PHP'
@@ -351,11 +329,11 @@ class {$className}{$extendsString}{$implementsString}
 
 PHP;
 
+        $baseFqn = ltrim($target['class'], '\\');
         $comment = <<<PHP
 
 /**
- * AUTO-GENERATED FILE.
- * Regenerate via: bin/semitexa request:generate {$className}
+ * AUTO-GENERATED. Base + all AsPayloadPart traits. Regenerate: bin/semitexa request:generate {$baseFqn} or bin/semitexa registry:sync:payloads
  */
 
 PHP;
@@ -392,7 +370,7 @@ PHP;
 
     private static function resolveResponseWrapperFqn(string $responseClass, array $module): string
     {
-        $projectRoot = dirname(__DIR__, 5);
+        $projectRoot = self::getProjectRoot();
         $moduleStudly = $module['studly'] ?? 'Project';
         $short = str_contains($responseClass, '\\')
             ? substr($responseClass, strrpos($responseClass, '\\') + 1)
@@ -400,7 +378,7 @@ PHP;
 
         $wrapperPath = $projectRoot . '/src/modules/' . $moduleStudly . '/Application/Resource/' . $short . '.php';
         if (is_file($wrapperPath)) {
-            return '\\Semitexa\\Modules\\' . $moduleStudly . '\\Resource\\' . $short;
+            return '\\Semitexa\\Modules\\' . $moduleStudly . '\\Application\\Resource\\' . $short;
         }
 
         return '\\' . ltrim($responseClass, '\\');

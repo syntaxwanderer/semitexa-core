@@ -8,7 +8,7 @@ The **only supported way** to run a Semitexa application is via **Docker**.
 
 The application runs `php server.php` inside the container; the Swoole server listens on port 9501 by default (configurable via `.env` `SWOOLE_PORT`). Do not run `php server.php` on the host as the primary way to run the app.
 
-After `semitexa init` (or first `composer install` with semitexa/core), the project includes a minimal `docker-compose.yml` and `Dockerfile` so that `server:start` works without extra setup.
+After `semitexa init` (or first `composer install` with semitexa/core), the project includes a minimal `docker-compose.yml` and `Dockerfile` so that `server:start` works without extra setup. When **EVENTS_ASYNC=1** in `.env`, the same `docker compose up` starts RabbitMQ; the app container depends on it so RabbitMQ is ready before the app.
 
 If you see "docker-compose.yml not found", run `semitexa init` to generate the project structure including `docker-compose.yml`, or add it manually.
 

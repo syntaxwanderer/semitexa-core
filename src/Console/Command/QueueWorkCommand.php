@@ -16,9 +16,9 @@ class QueueWorkCommand extends Command
     protected function configure(): void
     {
         $this->setName('queue:work')
-            ->setDescription('Run async handler worker')
-            ->addArgument('transport', InputArgument::OPTIONAL, 'Queue transport (rabbitmq, in-memory)', null)
-            ->addArgument('queue', InputArgument::OPTIONAL, 'Queue name', null)
+            ->setDescription('Run async events worker (processes handlers enqueued with execution: async)')
+            ->addArgument('transport', InputArgument::OPTIONAL, 'Transport: rabbitmq or in-memory (default from EVENTS_ASYNC)', null)
+            ->addArgument('queue', InputArgument::OPTIONAL, 'Queue name (default from EVENTS_QUEUE_DEFAULT)', null)
             ->addOption('timeout', 't', InputOption::VALUE_OPTIONAL, 'Worker timeout in seconds', null);
     }
 
@@ -28,7 +28,7 @@ class QueueWorkCommand extends Command
         $transport = $input->getArgument('transport');
         $queue = $input->getArgument('queue');
 
-        $io->title('Queue Worker');
+        $io->title('Events worker (queue)');
         
         try {
             $worker = new \Semitexa\Core\Queue\QueueWorker();

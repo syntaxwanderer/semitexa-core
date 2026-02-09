@@ -160,6 +160,15 @@ class RequestDtoHydrator
     }
     
     /**
+     * Return raw request data (JSON/POST/query + path params) with same priority as hydrate.
+     * Used by PayloadValidator for strict type and constraint checks.
+     */
+    public static function getRawData(Request $httpRequest, object $dto): array
+    {
+        return array_merge(self::collectData($httpRequest), self::extractPathParams($dto, $httpRequest));
+    }
+
+    /**
      * Collect data from HTTP Request (JSON body, POST, query)
      * 
      * Priority order:

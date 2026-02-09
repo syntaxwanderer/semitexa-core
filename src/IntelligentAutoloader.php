@@ -37,6 +37,7 @@ class IntelligentAutoloader
     private static array $allowedNamespacePrefixes = [
         'Semitexa\\' => true,
         'Semitexa\\Modules\\' => true,
+        'App\\' => true,
     ];
     
     /**

@@ -26,7 +26,7 @@ Request/Handler classes must be in **modules** (`src/modules/`, `packages/`, or 
 - [AsRequest](AsRequest.md) - HTTP Request DTO
 - [AsRequestHandler](AsRequestHandler.md) - HTTP Request Handler
 - [AsResponse](AsResponse.md) - HTTP Response DTO
-- [AsRequestPart](AsRequestPart.md) - Request extension trait
+- [AsPayloadPart](AsPayloadPart.md) - Payload/Request extension trait (codegen merges into wrapper)
 
 ### ORM Attributes
 

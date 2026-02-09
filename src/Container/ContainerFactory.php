@@ -206,10 +206,18 @@ class ContainerFactory
         // $definitions[\Semitexa\Core\Database\ConnectionPool::class] = \DI\create()
         //     ->constructor(\DI\get('db.config'));
 
-        // Service contracts from #[AsServiceContract(of: …)] on implementation classes (resolution by module extends)
+        // Service contracts: use registry resolver when present (convention: App\Registry\Contracts\{InterfaceShortName}Resolver), else bind to single implementation
         $contractRegistry = new ServiceContractRegistry();
         foreach ($contractRegistry->getContracts() as $contract => $impl) {
-            $definitions[$contract] = \DI\autowire($impl);
+            $resolverClass = self::getResolverClassForContract($contract);
+            if ($resolverClass !== null && class_exists($resolverClass)) {
+                $definitions[$resolverClass] = \DI\autowire($resolverClass);
+                $definitions[$contract] = \DI\factory(function (\DI\Container $c) use ($resolverClass) {
+                    return $c->get($resolverClass)->getContract();
+                });
+            } else {
+                $definitions[$contract] = \DI\autowire($impl);
+            }
         }
 
         // Apply service overrides from project src (#[Overrides(CurrentHead::class)]); only non-contract services
@@ -229,6 +237,22 @@ class ContainerFactory
         }
 
         return $definitions;
+    }
+
+    /**
+     * Resolver class by convention: App\Registry\Contracts\{ShortName}Resolver (Interface suffix → Resolver).
+     */
+    private static function getResolverClassForContract(string $interface): ?string
+    {
+        if (!interface_exists($interface)) {
+            return null;
+        }
+        $short = (new \ReflectionClass($interface))->getShortName();
+        $resolverShort = preg_replace('/Interface$/', 'Resolver', $short);
+        if ($resolverShort === $short) {
+            $resolverShort = $short . 'Resolver';
+        }
+        return 'App\\Registry\\Contracts\\' . $resolverShort;
     }
 
     /**

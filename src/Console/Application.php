@@ -17,6 +17,9 @@ use Semitexa\Core\Console\Command\TestHandlerCommand;
 use Semitexa\Core\Console\Command\InitCommand;
 use Semitexa\Core\Console\Command\ContractsListCommand;
 use Semitexa\Core\Console\Command\CacheClearCommand;
+use Semitexa\Core\Console\Command\RegistrySyncCommand;
+use Semitexa\Core\Console\Command\RegistrySyncPayloadsCommand;
+use Semitexa\Core\Console\Command\RegistrySyncContractsCommand;
 
 class Application extends SymfonyApplication
 {
@@ -28,6 +31,9 @@ class Application extends SymfonyApplication
             new InitCommand(),
             new ContractsListCommand(),
             new CacheClearCommand(),
+            new RegistrySyncCommand(),
+            new RegistrySyncPayloadsCommand(),
+            new RegistrySyncContractsCommand(),
             new ServerStartCommand(),
             new ServerStopCommand(),
             new ServerRestartCommand(),

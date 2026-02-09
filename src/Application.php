@@ -131,6 +131,13 @@ class Application
                 } catch (\Throwable $e) {
                     // Continue with empty DTO if hydration fails
                 }
+
+                // Validate payload: strict types + constraint attributes. Reject invalid input with 422.
+                $validationResult = \Semitexa\Core\Http\PayloadValidator::validate($reqDto, $request);
+                if (!$validationResult->isValid()) {
+                    return Response::json(['errors' => $validationResult->getErrors()], 422);
+                }
+
                 $this->debugLog('H2', 'Application::handleRoute', 'request_hydrated', [
                     'requestClass' => $requestClass,
                     'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),

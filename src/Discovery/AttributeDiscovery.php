@@ -161,12 +161,12 @@ class AttributeDiscovery
         // Preload module Handler classes to ensure they're in classMap
         self::preloadModuleHandlerClasses();
         
-        // Find all classes with AsPayload attribute
-        // Note: preloadModuleRequestClasses is already called in initialize()
-        $httpRequestClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsPayload::class),
-            fn ($class) => str_starts_with($class, 'Semitexa\\') && self::isModuleActiveForClass($class)
-        );
+        // Single source of truth: only src/registry/Payloads. No route if class is not there.
+        $allPayloadClasses = IntelligentAutoloader::findClassesWithAttribute(AsPayload::class);
+        $httpRequestClasses = array_values(array_filter(
+            $allPayloadClasses,
+            fn ($class) => str_starts_with($class, 'App\\Registry\\Payloads\\')
+        ));
         $requestMeta = [];
         $requestGroups = [];
         foreach ($httpRequestClasses as $className) {
@@ -307,6 +307,16 @@ class AttributeDiscovery
                 }
             } catch (\Throwable $e) {
                 // Silently skip on error
+            }
+        }
+
+        // Attach handlers to request subclasses (e.g. handler for Website\ContactFormRequest also runs for App\ContactFormRequest)
+        foreach (array_keys(self::$httpRequests) as $requestClass) {
+            foreach (self::$httpHandlers as $handlerMeta) {
+                $for = $handlerMeta['for'];
+                if ($for !== $requestClass && is_subclass_of($requestClass, $for)) {
+                    self::$httpRequests[$requestClass]['handlers'][] = $handlerMeta;
+                }
             }
         }
 
@@ -552,7 +562,7 @@ class AttributeDiscovery
             if ($head === null) {
                 throw new \RuntimeException(
                     "Request {$c['class']} declares overrides of {$overrides}, but there is no request for this route to override. " .
-                    "Remove the overrides attribute or ensure the target request exists for the same path/methods."
+                    "Remove the overrides attribute (registry is the single source of truth; registry payloads extend module base)."
                 );
             }
             $headClass = $head['class'];
