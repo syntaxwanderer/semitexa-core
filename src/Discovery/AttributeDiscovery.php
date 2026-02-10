@@ -25,6 +25,8 @@ class AttributeDiscovery
     private static array $routes = [];
     private static array $httpRequests = [];
     private static array $httpHandlers = [];
+    /** @var array<string, list<array{class: string, for?: string, payload?: string, resource?: string, execution: string, transport: ?string, queue: ?string, priority: int}>> key: payload . "\0" . resource */
+    private static array $handlersByPayloadAndResource = [];
     private static array $requestClassAliases = [];
     private static array $rawRequestAttrs = [];
     private static array $resolvedRequestAttrs = [];
@@ -128,7 +130,8 @@ class AttributeDiscovery
     }
     
     /**
-     * Enrich route with handlers and response class
+     * Enrich route with handlers and response class.
+     * Prefer handlers matched by (payload, resource); fallback to legacy handlers by payload only.
      */
     private static function enrichRoute(array $route): array
     {
@@ -136,11 +139,42 @@ class AttributeDiscovery
             $reqClass = $route['class'];
             $extra = self::$httpRequests[$reqClass] ?? null;
             if ($extra) {
-                $route['handlers'] = $extra['handlers'];
                 $route['responseClass'] = $extra['responseClass'];
+                $route['handlers'] = self::findHandlersByPayloadAndResource($reqClass, $extra['responseClass']);
             }
         }
         return $route;
+    }
+
+    /**
+     * Find handlers that match (requestClass, responseClass): resource === responseClass and requestClass is payload or subclass of payload.
+     *
+     * @return list<array{class: string, for?: string, execution: string, transport: ?string, queue: ?string, priority: int, ...}>
+     */
+    private static function findHandlersByPayloadAndResource(string $requestClass, ?string $responseClass): array
+    {
+        if ($responseClass === null) {
+            return [];
+        }
+        $found = [];
+        foreach (self::$handlersByPayloadAndResource as $key => $handlers) {
+            $parts = explode("\0", $key, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            $payload = $parts[0];
+            $resource = $parts[1];
+            if ($resource !== $responseClass) {
+                continue;
+            }
+            if ($requestClass !== $payload && !is_subclass_of($requestClass, $payload)) {
+                continue;
+            }
+            foreach ($handlers as $meta) {
+                $found[] = $meta;
+            }
+        }
+        return $found;
     }
     
     /**
@@ -151,6 +185,7 @@ class AttributeDiscovery
         self::$routes = [];
         self::$httpRequests = [];
         self::$httpHandlers = [];
+        self::$handlersByPayloadAndResource = [];
         self::$requestClassAliases = [];
         self::$rawRequestAttrs = [];
         self::$resolvedRequestAttrs = [];
@@ -284,39 +319,30 @@ class AttributeDiscovery
                 if (!empty($attrs)) {
                     /** @var AsPayloadHandler $attr */
                     $attr = $attrs[0]->newInstance();
-                    $for = $attr->for;
-                    if (isset(self::$requestClassAliases[$for])) {
-                        $for = self::$requestClassAliases[$for];
-                    }
+                    $payloadClass = $attr->payload;
+                    $resourceClass = $attr->resource;
                     $execution = HandlerExecution::normalize($attr->execution ?? null);
                     $transport = $attr->transport !== null ? EnvValueResolver::resolve($attr->transport) : null;
                     $queue = $attr->queue !== null ? EnvValueResolver::resolve($attr->queue) : null;
                     $priority = $attr->priority ?? 0;
                     $handlerMeta = [
                         'class' => $class->getName(),
-                        'for' => $for,
+                        'payload' => $payloadClass,
+                        'resource' => $resourceClass,
                         'execution' => $execution->value,
                         'transport' => $transport ?: null,
                         'queue' => $queue ?: null,
                         'priority' => $priority,
                     ];
-                    self::$httpHandlers[$class->getName()] = $handlerMeta;
-                    if (isset(self::$httpRequests[$for])) {
-                        self::$httpRequests[$for]['handlers'][] = $handlerMeta;
+                    $key = $payloadClass . "\0" . $resourceClass;
+                    if (!isset(self::$handlersByPayloadAndResource[$key])) {
+                        self::$handlersByPayloadAndResource[$key] = [];
                     }
+                    self::$handlersByPayloadAndResource[$key][] = $handlerMeta;
+                    self::$httpHandlers[$class->getName()] = $handlerMeta;
                 }
             } catch (\Throwable $e) {
                 // Silently skip on error
-            }
-        }
-
-        // Attach handlers to request subclasses (e.g. handler for Website\ContactFormRequest also runs for App\ContactFormRequest)
-        foreach (array_keys(self::$httpRequests) as $requestClass) {
-            foreach (self::$httpHandlers as $handlerMeta) {
-                $for = $handlerMeta['for'];
-                if ($for !== $requestClass && is_subclass_of($requestClass, $for)) {
-                    self::$httpRequests[$requestClass]['handlers'][] = $handlerMeta;
-                }
             }
         }
 

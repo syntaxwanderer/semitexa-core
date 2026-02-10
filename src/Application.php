@@ -220,7 +220,7 @@ class Application
                     $execution = $handlerMeta['execution'] ?? HandlerExecution::Sync->value;
                     if ($execution === HandlerExecution::Async->value) {
                         QueueDispatcher::enqueue(
-                            is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'for' => $requestClass],
+                            is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $requestClass],
                             $reqDto,
                             $resDto
                         );

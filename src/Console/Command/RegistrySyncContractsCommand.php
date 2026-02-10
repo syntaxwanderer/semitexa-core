@@ -39,9 +39,14 @@ class RegistrySyncContractsCommand extends BaseCommand
         $multiImpl = array_filter($details, fn(array $d): bool => count($d['implementations'] ?? []) >= 2);
 
         $generated = RegistryContractResolverGenerator::generateAll($multiImpl);
+        $generatedFactories = RegistryContractResolverGenerator::generateAllFactories($multiImpl);
 
         $io = new SymfonyStyle($input, $output);
-        $io->success('Registry contract resolvers synced: ' . count($generated) . ' resolver(s) in src/registry/Contracts/.');
+        $msg = count($generated) . ' resolver(s)';
+        if (count($generatedFactories) > 0) {
+            $msg .= ', ' . count($generatedFactories) . ' factory(ies)';
+        }
+        $io->success('Registry contract resolvers synced: ' . $msg . ' in src/registry/Contracts/.');
         return Command::SUCCESS;
     }
 

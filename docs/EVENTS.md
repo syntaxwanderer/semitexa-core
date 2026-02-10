@@ -12,7 +12,7 @@ When **EVENTS_ASYNC=1**, the app uses RabbitMQ. If you run with Docker (`docker 
 
 ## Sync vs async per handler (event)
 
-Every declared handler (e.g. `#[AsPayloadHandler(for: SomeRequest::class)]`) has an **execution** option:
+Every declared handler (e.g. `#[AsPayloadHandler(payload: SomeRequest::class, resource: SomeResponse::class)]`) has an **execution** option:
 
 - **Sync** (default): handler runs in the same process and blocks the HTTP response until it finishes.
 - **Async**: handler is enqueued; the HTTP response is sent immediately and the handler runs later (via a worker or in the background).
@@ -20,7 +20,7 @@ Every declared handler (e.g. `#[AsPayloadHandler(for: SomeRequest::class)]`) has
 Set it in the attribute:
 
 ```php
-#[AsPayloadHandler(for: SomeRequest::class, execution: HandlerExecution::Async)]
+#[AsPayloadHandler(payload: SomeRequest::class, resource: SomeResponse::class, execution: HandlerExecution::Async)]
 ```
 
 So each “event” (handler) can be run synchronously or asynchronously; the framework does not force one mode globally.

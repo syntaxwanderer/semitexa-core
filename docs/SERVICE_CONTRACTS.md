@@ -43,3 +43,13 @@ The registry resolver is a **factory** in the usual sense: it receives all imple
 - **Custom strategy:** merge, delegate, or switch between implementations inside `getContract()`.
 
 There is no separate “Factory” pattern in Semitexa: service contracts with multiple implementations use this single mechanism. Document or name the resolver as a factory in your codebase if that helps (e.g. `SendEmailFactory` / `ItemListProviderResolver`).
+
+## Factory* naming convention (choose implementation by key)
+
+When you need to **choose** an implementation at runtime (e.g. by module name) instead of always using the active one, define an interface whose short name **starts with `Factory`** in the same namespace as the base contract.
+
+- **Example:** For `ItemListProviderInterface`, define `FactoryItemListProviderInterface` extending `Semitexa\Core\Contract\ContractFactoryInterface`, with `getDefault()`, `get(string $key)`, and `keys()` returning the base contract type.
+- **Keys** are composite: `Module::ShortClassName` (e.g. `Website::WebsiteItemListProvider`). This allows multiple implementations per module. Lookup in `get($key)` is **case-insensitive** (e.g. `website::websiteitemlistprovider` is the same). Run **`bin/semitexa registry:sync:contracts`** to generate the implementation in `src/registry/Contracts/{ContractShortName}Factory.php`.
+- **Usage:** Inject the Factory* interface where you need to pick; use `getDefault()` for the active implementation or `get('Website::WebsiteItemListProvider')` for a specific one.
+
+See `Semitexa\Core\Contract\ContractFactoryInterface` for the base interface.

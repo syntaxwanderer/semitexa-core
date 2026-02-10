@@ -9,6 +9,7 @@ use Semitexa\Core\Queue\HandlerExecution;
 
 /**
  * Marks a class as an HTTP payload (request) handler.
+ * Match by (payload, resource): this handler runs for the given Payload and builds the given Resource.
  *
  * @see DocumentedAttributeInterface
  */
@@ -20,7 +21,8 @@ class AsPayloadHandler implements DocumentedAttributeInterface
     public readonly ?string $doc;
 
     public function __construct(
-        public string $for,
+        public string $payload,
+        public string $resource,
         public HandlerExecution|string|null $execution = null,
         public ?string $transport = null,
         public ?string $queue = null,

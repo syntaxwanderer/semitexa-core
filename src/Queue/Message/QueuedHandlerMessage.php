@@ -8,6 +8,8 @@ use JsonException;
 
 class QueuedHandlerMessage implements \JsonSerializable
 {
+    public const TYPE = 'handler';
+
     public function __construct(
         public string $handlerClass,
         public string $requestClass,
@@ -22,6 +24,7 @@ class QueuedHandlerMessage implements \JsonSerializable
     public function jsonSerialize(): array
     {
         return [
+            'type' => self::TYPE,
             'handler' => $this->handlerClass,
             'requestClass' => $this->requestClass,
             'responseClass' => $this->responseClass,
@@ -42,9 +45,11 @@ class QueuedHandlerMessage implements \JsonSerializable
     public static function fromJson(string $payload): self
     {
         $data = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+        // Support legacy messages without type
+        $handlerClass = $data['handlerClass'] ?? $data['handler'] ?? '';
 
         return new self(
-            handlerClass: $data['handler'],
+            handlerClass: $handlerClass,
             requestClass: $data['requestClass'],
             responseClass: $data['responseClass'],
             requestPayload: $data['requestPayload'] ?? [],

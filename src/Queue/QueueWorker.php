@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Queue;
 
+use Semitexa\Core\Queue\Message\QueuedEventListenerMessage;
 use Semitexa\Core\Queue\Message\QueuedHandlerMessage;
 use Semitexa\Core\Support\DtoSerializer;
+use Semitexa\Core\Container\ContainerFactory;
 
 class QueueWorker
 {
@@ -43,9 +45,68 @@ class QueueWorker
     public function processPayload(string $payload): void
     {
         try {
-            $message = QueuedHandlerMessage::fromJson($payload);
+            $data = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
         } catch (\Throwable $e) {
             echo "❌ Failed to decode queued message: {$e->getMessage()}\n";
+            $this->updateStats('failed');
+            return;
+        }
+
+        $type = $data['type'] ?? 'handler';
+        if ($type === QueuedEventListenerMessage::TYPE) {
+            $this->processEventPayload($payload);
+        } else {
+            $this->processHandlerPayload($payload);
+        }
+    }
+
+    private function processEventPayload(string $payload): void
+    {
+        try {
+            $message = QueuedEventListenerMessage::fromJson($payload);
+        } catch (\Throwable $e) {
+            echo "❌ Failed to decode event message: {$e->getMessage()}\n";
+            $this->updateStats('failed');
+            return;
+        }
+
+        if (!class_exists($message->listenerClass)) {
+            echo "⚠️  Event listener {$message->listenerClass} not found\n";
+            $this->updateStats('failed');
+            return;
+        }
+
+        try {
+            $event = $this->hydrateDto($message->eventClass, $message->eventPayload);
+            $container = ContainerFactory::get();
+            $listener = $container->get($message->listenerClass);
+            if (!method_exists($listener, 'handle')) {
+                echo "⚠️  Listener {$message->listenerClass} has no handle() method\n";
+                $this->updateStats('failed');
+                return;
+            }
+        } catch (\Throwable $e) {
+            echo "❌ Error preparing event listener: {$e->getMessage()}\n";
+            $this->updateStats('failed');
+            return;
+        }
+
+        try {
+            $listener->handle($event);
+            echo "✅ Async event listener executed: {$message->listenerClass}\n";
+            $this->updateStats('processed');
+        } catch (\Throwable $e) {
+            echo "❌ Error executing event listener: {$e->getMessage()}\n";
+            $this->updateStats('failed');
+        }
+    }
+
+    private function processHandlerPayload(string $payload): void
+    {
+        try {
+            $message = QueuedHandlerMessage::fromJson($payload);
+        } catch (\Throwable $e) {
+            echo "❌ Failed to decode handler message: {$e->getMessage()}\n";
             $this->updateStats('failed');
             return;
         }
@@ -76,8 +137,6 @@ class QueueWorker
         try {
             $handler->handle($request, $response);
             echo "✅ Async handler executed: {$handlerClass}\n";
-            
-            // Update stats
             $this->updateStats('processed');
         } catch (\Throwable $e) {
             echo "❌ Error executing handler: {$e->getMessage()}\n";

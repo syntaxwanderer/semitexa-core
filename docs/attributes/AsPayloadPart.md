@@ -25,7 +25,7 @@ The generated wrapper class lives in the module’s `Application/Payload/` and `
    ```php
    use Semitexa\Core\Attributes\AsPayloadPart;
 
-   #[AsPayloadPart(base: \Semitexa\Modules\Website\Application\Payload\FeaturesJsonRequest::class)]
+   #[AsPayloadPart(base: \Semitexa\Modules\Website\Application\Payload\FeaturesJsonPayload::class)]
    trait FeaturesJsonRequestTracking
    {
        public string $trackingId = '';

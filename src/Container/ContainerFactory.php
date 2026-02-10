@@ -84,6 +84,8 @@ class ContainerFactory
             return $registry;
         });
 
+        $definitions[\Semitexa\Core\Event\EventDispatcher::class] = \DI\autowire();
+
         // Database Connection Pool - singleton (safe to persist)
         // Initialize once when container is created
         $definitions[\Semitexa\Orm\Connection\ConnectionPool::class] = \DI\factory(function () {
@@ -215,6 +217,14 @@ class ContainerFactory
                 $definitions[$contract] = \DI\factory(function (\DI\Container $c) use ($resolverClass) {
                     return $c->get($resolverClass)->getContract();
                 });
+                // Factory* convention: if interface Factory{ContractShortName} exists, bind it to generated App\Registry\Contracts\{ContractShortName}Factory
+                $factoryInterface = \Semitexa\Core\Registry\RegistryContractResolverGenerator::getFactoryInterfaceForContract($contract);
+                if ($factoryInterface !== null && interface_exists($factoryInterface)) {
+                    $factoryClass = \Semitexa\Core\Registry\RegistryContractResolverGenerator::getGeneratedFactoryClassForContract($contract);
+                    if (class_exists($factoryClass)) {
+                        $definitions[$factoryInterface] = \DI\autowire($factoryClass);
+                    }
+                }
             } else {
                 $definitions[$contract] = \DI\autowire($impl);
             }

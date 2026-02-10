@@ -18,7 +18,7 @@ class QueueDispatcher
 
         $queueName = $handlerMeta['queue'] ?? null;
         if (!$queueName) {
-            $queueName = QueueConfig::defaultQueueName($handlerMeta['for'] ?? get_class($requestDto));
+            $queueName = QueueConfig::defaultQueueName($handlerMeta['payload'] ?? get_class($requestDto));
         }
 
         $message = new QueuedHandlerMessage(
