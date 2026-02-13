@@ -26,6 +26,14 @@ class RequestScopedContainer
     }
 
     /**
+     * Set a request-scoped instance (e.g. Session, CookieJar created by Application from Request).
+     */
+    public function set(string $id, object $instance): void
+    {
+        $this->requestScopedCache[$id] = $instance;
+    }
+
+    /**
      * Get a service - creates new instance for request-scoped services
      * 
      * For handlers with property injection (#[Inject]), PHP-DI needs autowire() definition
@@ -33,6 +41,19 @@ class RequestScopedContainer
      */
     public function get(string $id): mixed
     {
+        if (isset($this->requestScopedCache[$id])) {
+            return $this->requestScopedCache[$id];
+        }
+
+        // Session, Cookie, and HTTP Request are set per-request by Application; do not auto-create
+        if (
+            $id === \Semitexa\Core\Session\SessionInterface::class
+            || $id === \Semitexa\Core\Cookie\CookieJarInterface::class
+            || $id === \Semitexa\Core\Request::class
+        ) {
+            throw new \RuntimeException("{$id} is not set. Ensure Application initializes session, cookies, and request at request start.");
+        }
+
         // Check if this is a request-scoped service
         if ($this->isRequestScoped($id)) {
             // For request-scoped services, check if we have a definition

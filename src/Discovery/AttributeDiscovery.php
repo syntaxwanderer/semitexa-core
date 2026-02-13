@@ -7,7 +7,6 @@ namespace Semitexa\Core\Discovery;
 use Semitexa\Core\Attributes\AsPayload;
 use Semitexa\Core\Attributes\AsPayloadHandler;
 use Semitexa\Core\Attributes\AsResource;
-use Semitexa\Core\Attributes\AsResourceOverride;
 use Semitexa\Core\Config\EnvValueResolver;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\IntelligentAutoloader;
@@ -33,7 +32,6 @@ class AttributeDiscovery
     private static array $rawResponseAttrs = [];
     private static array $resolvedResponseAttrs = [];
     private static array $responseClassAliases = [];
-    private static array $responseAttrOverrides = [];
     private static bool $initialized = false;
     
     /**
@@ -147,7 +145,44 @@ class AttributeDiscovery
     }
 
     /**
-     * Find handlers that match (requestClass, responseClass): resource === responseClass and requestClass is payload or subclass of payload.
+     * Ensures every payload referenced by a handler has a registry entry (generated in src/registry/Payloads/).
+     * Routes are discovered only from registry; without sync the new payload would not get a route.
+     *
+     * @throws \RuntimeException when a handler payload has no corresponding App\Registry\Payloads\* class
+     */
+    private static function assertPayloadsHaveRegistryEntries(): void
+    {
+        $registryRequestClasses = array_keys(self::$httpRequests);
+        $missing = [];
+        foreach (self::$handlersByPayloadAndResource as $key => $handlers) {
+            $parts = explode("\0", $key, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            $payloadClass = $parts[0];
+            $hasRegistry = false;
+            foreach ($registryRequestClasses as $requestClass) {
+                if ($requestClass === $payloadClass || is_subclass_of($requestClass, $payloadClass)) {
+                    $hasRegistry = true;
+                    break;
+                }
+            }
+            if (!$hasRegistry) {
+                $missing[] = $payloadClass;
+            }
+        }
+        if ($missing !== []) {
+            $list = implode(', ', array_unique($missing));
+            throw new \RuntimeException(
+                "Payload(s) have no registry entry (routes are built from src/registry/Payloads/). Missing: {$list}. Run: bin/semitexa registry:sync:payloads"
+            );
+        }
+    }
+
+    /**
+     * Find handlers that match (requestClass, responseClass).
+     * Handlers register with module resource class; routes use registry class (subclass of module).
+     * Match when: resource === responseClass OR responseClass is subclass of resource.
      *
      * @return list<array{class: string, for?: string, execution: string, transport: ?string, queue: ?string, priority: int, ...}>
      */
@@ -164,7 +199,7 @@ class AttributeDiscovery
             }
             $payload = $parts[0];
             $resource = $parts[1];
-            if ($resource !== $responseClass) {
+            if ($resource !== $responseClass && !is_subclass_of($responseClass, $resource)) {
                 continue;
             }
             if ($requestClass !== $payload && !is_subclass_of($requestClass, $payload)) {
@@ -303,9 +338,6 @@ class AttributeDiscovery
             }
         }
 
-        // Apply response overrides from src (AsResourceOverride) — only render hints, not class swap
-        self::collectResponseOverrides();
-
         // Find handlers and map to requests (Semitexa packages + project App\ handlers)
         $httpHandlerClasses = array_filter(
             IntelligentAutoloader::findClassesWithAttribute(AsPayloadHandler::class),
@@ -345,6 +377,8 @@ class AttributeDiscovery
                 // Silently skip on error
             }
         }
+
+        self::assertPayloadsHaveRegistryEntries();
 
         // Discover layout slot contributions (optional)
         if (
@@ -434,10 +468,12 @@ class AttributeDiscovery
 
     private static function processResponseAttributes(): void
     {
-        $responseClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsResource::class),
-            fn ($class) => str_starts_with($class, 'Semitexa\\')
-        );
+        // Single source of truth: only src/registry/Resources (same as Payloads from src/registry/Payloads)
+        $allResourceClasses = IntelligentAutoloader::findClassesWithAttribute(AsResource::class);
+        $responseClasses = array_values(array_filter(
+            $allResourceClasses,
+            fn ($class) => str_starts_with($class, 'App\\Registry\\Resources\\')
+        ));
         if (empty($responseClasses)) {
             return;
         }
@@ -469,6 +505,13 @@ class AttributeDiscovery
                 $responseMeta[$className] = $meta;
                 $groupKey = $meta['attr']['base'] ?? $className;
                 $responseGroups[$groupKey][] = $meta;
+
+                // Map registry class to itself and base (module) class to this registry class for canonicalResponseClass()
+                self::$responseClassAliases[$className] = $className;
+                $parent = $class->getParentClass();
+                if ($parent) {
+                    self::$responseClassAliases[$parent->getName()] = $className;
+                }
             } catch (\Throwable $e) {
                 // Silently skip on error
             }
@@ -645,79 +688,6 @@ class AttributeDiscovery
         } catch (\Throwable) {
             return false;
         }
-    }
-
-    /**
-     * Collect response overrides declared with AsResourceOverride.
-     * Store class replacement and attribute overrides for later usage.
-     */
-    private static function collectResponseOverrides(): void
-    {
-        $overrideClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsResourceOverride::class),
-            fn ($class) => str_starts_with($class, 'Semitexa\\')
-        );
-        if (empty($overrideClasses)) {
-            return;
-        }
-        $overrides = [];
-        foreach ($overrideClasses as $className) {
-            try {
-                $rc = new \ReflectionClass($className);
-                $file = $rc->getFileName() ?: '';
-                $isProjectSrc = (strpos($file, '/src/') !== false) && (strpos($file, '/packages/semitexa/') === false);
-                if (!$isProjectSrc) {
-                    continue;
-                }
-                $attrs = $rc->getAttributes(AsResourceOverride::class);
-                if (empty($attrs)) {
-                    continue;
-                }
-                /** @var AsResourceOverride $o */
-                $o = $attrs[0]->newInstance();
-                $overrides[] = ['meta' => $o, 'file' => $file, 'class' => $className];
-            } catch (\Throwable $e) {
-                // Silently skip on error
-            }
-        }
-        if (empty($overrides)) {
-            return;
-        }
-        usort($overrides, function ($a, $b) {
-            return ($b['meta']->priority ?? 0) <=> ($a['meta']->priority ?? 0);
-        });
-        foreach ($overrides as $ov) {
-            /** @var AsResourceOverride $meta */
-            $meta = $ov['meta'];
-            $target = $meta->of;
-            $attrs = [];
-            if ($meta->handle !== null) {
-                $attrs['handle'] = EnvValueResolver::resolve($meta->handle);
-            }
-            if ($meta->format !== null) {
-                $attrs['format'] = $meta->format; // Enum, no need to resolve
-            }
-            if ($meta->renderer !== null) {
-                $attrs['renderer'] = EnvValueResolver::resolve($meta->renderer);
-            }
-            if ($meta->context !== null) {
-                $attrs['context'] = EnvValueResolver::resolve($meta->context);
-            }
-            if (!empty($attrs)) {
-                $canonical = self::canonicalResponseClass($target);
-                $current = self::$resolvedResponseAttrs[$canonical] ?? self::applyResponseDefaults([], self::classBasename($canonical), $canonical);
-                foreach ($attrs as $key => $value) {
-                    $current[$key] = $value;
-                }
-                self::$resolvedResponseAttrs[$canonical] = $current;
-                self::$responseAttrOverrides[$canonical] = $attrs;
-            }
-        }
-    }
-    
-    public static function getResponseAttrOverride(string $class): ?array
-    {
-        return self::$responseAttrOverrides[$class] ?? null;
     }
 
     private static function classBasename(string $class): string

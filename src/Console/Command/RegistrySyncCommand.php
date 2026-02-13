@@ -20,7 +20,7 @@ class RegistrySyncCommand extends BaseCommand
     protected function configure(): void
     {
         $this->setName('registry:sync')
-            ->setDescription('Run all registry sync commands (payloads, then entities if available).')
+            ->setDescription('Run all registry sync commands (payloads, resources, contracts, and entities if available).')
             ->addOption('json', null, InputOption::VALUE_NONE, 'Pass --json to sub-commands that support it');
     }
 
@@ -39,6 +39,12 @@ class RegistrySyncCommand extends BaseCommand
         $payloadsCmd = $app->find('registry:sync:payloads');
         $payloadsInput = new ArrayInput($json ? ['--json' => true] : []);
         if ($payloadsCmd->run($payloadsInput, $output) !== Command::SUCCESS) {
+            $exitCode = Command::FAILURE;
+        }
+
+        $resourcesCmd = $app->find('registry:sync:resources');
+        $resourcesInput = new ArrayInput($json ? ['--json' => true] : []);
+        if ($resourcesCmd->run($resourcesInput, $output) !== Command::SUCCESS) {
             $exitCode = Command::FAILURE;
         }
 

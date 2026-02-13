@@ -19,6 +19,7 @@ use Semitexa\Core\Console\Command\ContractsListCommand;
 use Semitexa\Core\Console\Command\CacheClearCommand;
 use Semitexa\Core\Console\Command\RegistrySyncCommand;
 use Semitexa\Core\Console\Command\RegistrySyncPayloadsCommand;
+use Semitexa\Core\Console\Command\RegistrySyncResourcesCommand;
 use Semitexa\Core\Console\Command\RegistrySyncContractsCommand;
 
 class Application extends SymfonyApplication
@@ -33,6 +34,7 @@ class Application extends SymfonyApplication
             new CacheClearCommand(),
             new RegistrySyncCommand(),
             new RegistrySyncPayloadsCommand(),
+            new RegistrySyncResourcesCommand(),
             new RegistrySyncContractsCommand(),
             new ServerStartCommand(),
             new ServerStopCommand(),

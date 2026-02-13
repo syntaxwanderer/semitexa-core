@@ -12,13 +12,10 @@ use Attribute;
  * Modules can provide payload parts that will be combined into the final
  * project-specific request class during code generation.
  *
- * @see DocumentedAttributeInterface
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsPayloadPart implements DocumentedAttributeInterface
+class AsPayloadPart
 {
-    use DocumentedAttributeTrait;
-
     public readonly ?string $doc;
 
     public function __construct(
@@ -29,10 +26,5 @@ class AsPayloadPart implements DocumentedAttributeInterface
         ?string $doc = null
     ) {
         $this->doc = $doc;
-    }
-
-    public function getDocPath(): string
-    {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsPayloadPart.md';
     }
 }

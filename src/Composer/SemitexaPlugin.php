@@ -15,7 +15,7 @@ use Symfony\Component\Process\Process;
 /**
  * Composer plugin: after install/update, if semitexa/core is installed:
  * - New project (missing server.php, AI_ENTRY.md, README.md, or docker-compose.yml): runs full "semitexa init".
- * - Existing project: runs "semitexa init --only-docs --force" so AI_ENTRY, README, docs/, server.php and .env.example stay up to date. .env is never touched. Use AI_NOTES.md for your own notes — it is never overwritten.
+ * - Existing project: runs "semitexa init --only-docs --force" to sync docs and scaffold (AI_ENTRY, README, server.php, .env.example, Dockerfile, docker-compose.yml, phpunit.xml.dist, bin/semitexa, .gitignore). .env is never touched. AI_NOTES.md is never overwritten.
  */
 final class SemitexaPlugin implements PluginInterface, EventSubscriberInterface
 {
@@ -30,10 +30,12 @@ final class SemitexaPlugin implements PluginInterface, EventSubscriberInterface
 
     public function deactivate(Composer $composer, IOInterface $io): void
     {
+        // no-op (required by PluginInterface)
     }
 
     public function uninstall(Composer $composer, IOInterface $io): void
     {
+        // no-op (required by PluginInterface)
     }
 
     public static function getSubscribedEvents(): array
@@ -78,19 +80,34 @@ final class SemitexaPlugin implements PluginInterface, EventSubscriberInterface
                 $this->io->write('<comment>Semitexa init failed. Run manually: vendor/bin/semitexa init</comment>');
                 return;
             }
+            $this->runRegistrySync($php, $bin, $root);
             $this->io->write('<info>Semitexa: project structure created. Next: cp .env.example .env && bin/semitexa server:start</info>');
             return;
         }
 
-        // Existing project: refresh docs + server.php + .env.example (never touch .env)
-        $this->io->write('<info>Semitexa: refreshing project docs and scaffold (semitexa init --only-docs)...</info>');
+        // Existing project: refresh docs + scaffold (Dockerfile, docker-compose, phpunit, bin/semitexa, etc.); never touch .env
+        $this->io->write('<info>Semitexa: syncing docs and scaffold (semitexa init --only-docs)...</info>');
         $process = new Process([$php, $bin, 'init', '--only-docs', '--force'], $root);
         $process->setTimeout(30);
         $process->run(function (string $type, string $buffer): void {
             $this->io->write($buffer, false);
         });
         if ($process->isSuccessful()) {
-            $this->io->write('<info>Semitexa: docs, server.php and .env.example updated. .env not touched. Your notes: AI_NOTES.md (never overwritten).</info>');
+            $this->runRegistrySync($php, $bin, $root);
+            $this->io->write('<info>Semitexa: docs and scaffold (Dockerfile, docker-compose, phpunit, etc.) updated. .env not touched. Your notes: AI_NOTES.md (never overwritten).</info>');
+        }
+    }
+
+    private function runRegistrySync(string $php, string $bin, string $root): void
+    {
+        $this->io->write('<info>Semitexa: syncing registry (payloads + contracts)...</info>');
+        $process = new Process([$php, $bin, 'registry:sync'], $root);
+        $process->setTimeout(60);
+        $process->run(function (string $type, string $buffer): void {
+            $this->io->write($buffer, false);
+        });
+        if (!$process->isSuccessful()) {
+            $this->io->write('<comment>Semitexa registry:sync failed. Run manually: bin/semitexa registry:sync</comment>');
         }
     }
 }

@@ -14,6 +14,7 @@ use DI\ContainerBuilder;
 class ContainerFactory
 {
     private static ?Container $container = null;
+    private static ?RequestScopedContainer $requestScopedContainerInstance = null;
 
     /**
      * Get or create the container instance
@@ -85,6 +86,19 @@ class ContainerFactory
         });
 
         $definitions[\Semitexa\Core\Event\EventDispatcher::class] = \DI\autowire();
+
+        $definitions[\Semitexa\Core\Log\LoggerInterface::class] = \DI\autowire(\Semitexa\Core\Log\AsyncJsonLogger::class);
+
+        // Session and Cookie: resolved from request-scoped container (set by Application at request start)
+        $definitions[\Semitexa\Core\Session\SessionInterface::class] = \DI\factory(function () {
+            return self::getRequestScoped()->get(\Semitexa\Core\Session\SessionInterface::class);
+        });
+        $definitions[\Semitexa\Core\Cookie\CookieJarInterface::class] = \DI\factory(function () {
+            return self::getRequestScoped()->get(\Semitexa\Core\Cookie\CookieJarInterface::class);
+        });
+        $definitions[\Semitexa\Core\Request::class] = \DI\factory(function () {
+            return self::getRequestScoped()->get(\Semitexa\Core\Request::class);
+        });
 
         // Database Connection Pool - singleton (safe to persist)
         // Initialize once when container is created
@@ -187,7 +201,7 @@ class ContainerFactory
             return new \Semitexa\UserDomain\Domain\Service\LoginAnalyticsService();
         });
 
-        // User repository - request-scoped (uses EntityManager); can be overridden via #[Overrides(UserRepository::class)] in project src
+        // User repository - request-scoped (uses EntityManager)
         $userRepoInterface = \Semitexa\UserDomain\Domain\Repository\UserRepositoryInterface::class;
         $userRepoDefault = \Semitexa\UserDomain\Domain\Repository\UserRepository::class;
         if (interface_exists($userRepoInterface) && class_exists($userRepoDefault)) {
@@ -227,22 +241,6 @@ class ContainerFactory
                 }
             } else {
                 $definitions[$contract] = \DI\autowire($impl);
-            }
-        }
-
-        // Apply service overrides from project src (#[Overrides(CurrentHead::class)]); only non-contract services
-        $overridableDefaults = [];
-        if (interface_exists($userRepoInterface) && class_exists($userRepoDefault)) {
-            $overridableDefaults[$userRepoInterface] = $userRepoDefault;
-        }
-        if ($overridableDefaults !== []) {
-            try {
-                $registry = new ServiceOverrideRegistry(self::getProjectRoot(), $overridableDefaults);
-                foreach ($registry->getOverrides() as $contract => $impl) {
-                    $definitions[$contract] = \DI\autowire($impl);
-                }
-            } catch (\Throwable $e) {
-                throw $e;
             }
         }
 
@@ -291,12 +289,15 @@ class ContainerFactory
     }
 
     /**
-     * Get request-scoped container wrapper
-     * Use this in Application for resolving handlers
+     * Get request-scoped container wrapper (singleton per worker).
+     * Application uses this to set Session/Cookie and resolve handlers; container factories delegate here for Session/Cookie.
      */
     public static function getRequestScoped(): RequestScopedContainer
     {
-        return new RequestScopedContainer(self::create());
+        if (self::$requestScopedContainerInstance === null) {
+            self::$requestScopedContainerInstance = new RequestScopedContainer(self::create());
+        }
+        return self::$requestScopedContainerInstance;
     }
 }
 

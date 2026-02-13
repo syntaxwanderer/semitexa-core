@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Semitexa\Core;
 
-use Semitexa\Core\Attributes\AsModule;
-use ReflectionClass;
 
 /**
  * Module Registry for managing different types of modules
@@ -114,19 +112,6 @@ class ModuleRegistry
             }
         }
         return false;
-    }
-
-    /**
-     * Get node role for a module
-     */
-    public static function getModuleRole(string $moduleName): string
-    {
-        foreach (self::$modules as $module) {
-            if ($module['name'] === $moduleName || in_array($moduleName, $module['aliases'], true)) {
-                return (string)($module['config']['role'] ?? 'observer');
-            }
-        }
-        return 'observer';
     }
 
     /**
@@ -415,64 +400,9 @@ class ModuleRegistry
         return [];
     }
 
-    /**
-     * Find module configuration via AsModule attribute
-     */
     private static function findModuleConfig(string $path, string $namespace): array
     {
-        $configFiles = array_merge(
-            glob($path . '/ModuleConfig.php') ?: [],
-            glob($path . '/**/ModuleConfig.php') ?: []
-        );
-        $configFiles = array_values(array_filter($configFiles, 'is_file'));
-
-        foreach ($configFiles as $file) {
-            $content = file_get_contents($file);
-            if (!preg_match('/class\s+(\w+)/', $content, $matches)) {
-                continue;
-            }
-            $shortName = $matches[1];
-            
-            // Try to infer namespace from path if needed, but we have $namespace
-            // Actually, we need the full class name.
-            // For now, let's assume it's in the root namespace of the module or a sub-namespace
-            // We'll try to require the file and extract attributes
-            
-            try {
-                // Determine full class name
-                if  (preg_match('/namespace\s+([^;]+);/', $content, $nsMatches)) {
-                    $fullClass = $nsMatches[1] . '\\' . $shortName;
-                } else {
-                    $fullClass = $namespace . '\\' . $shortName;
-                }
-
-                if (!class_exists($fullClass)) {
-                    require_once $file;
-                }
-
-                if (class_exists($fullClass)) {
-                    $reflection = new ReflectionClass($fullClass);
-                    $attrs = $reflection->getAttributes(AsModule::class);
-                    if (!empty($attrs)) {
-                        /** @var AsModule $attr */
-                        $attr = $attrs[0]->newInstance();
-                        return [
-                            'name' => $attr->name,
-                            'active' => $attr->active,
-                            'role' => $attr->role,
-                            'class' => $fullClass
-                        ];
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Skip if can't load or reflect
-            }
-        }
-
-        return [
-            'active' => true,
-            'role' => 'observer'
-        ];
+        return ['active' => true, 'role' => 'observer'];
     }
 
     private static function discoverPackageModules(string $projectRoot): array

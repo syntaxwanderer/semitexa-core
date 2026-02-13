@@ -122,7 +122,8 @@ class QueueWorker
             $request = $this->hydrateDto($message->requestClass, $message->requestPayload);
             $response = $this->hydrateDto($message->responseClass, $message->responsePayload);
 
-            $handler = new $handlerClass();
+            $container = ContainerFactory::get();
+            $handler = $container->get($handlerClass);
             if (!method_exists($handler, 'handle')) {
                 echo "⚠️  Handler {$handlerClass} has no handle() method\n";
                 $this->updateStats('failed');

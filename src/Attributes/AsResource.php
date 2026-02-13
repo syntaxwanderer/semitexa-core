@@ -12,13 +12,10 @@ use Attribute;
  * All parameters are matched by name; order in source does not matter.
  * Single positional value (e.g. #[AsResource('about')]) sets handle.
  *
- * @see DocumentedAttributeInterface
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsResource implements DocumentedAttributeInterface
+class AsResource
 {
-    use DocumentedAttributeTrait;
-
     public readonly ?string $doc;
 
     public function __construct(
@@ -30,10 +27,5 @@ class AsResource implements DocumentedAttributeInterface
         public ?string $renderer = null,
     ) {
         $this->doc = $doc;
-    }
-
-    public function getDocPath(): string
-    {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsResource.md';
     }
 }

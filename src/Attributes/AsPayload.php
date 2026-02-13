@@ -31,10 +31,8 @@ use Attribute;
  * ```
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsPayload implements DocumentedAttributeInterface
+class AsPayload
 {
-    use DocumentedAttributeTrait;
-
     public readonly ?string $doc;
 
     public function __construct(
@@ -54,10 +52,5 @@ class AsPayload implements DocumentedAttributeInterface
         public string $protocol = 'http',
     ) {
         $this->doc = $doc;
-    }
-
-    public function getDocPath(): string
-    {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsPayload.md';
     }
 }

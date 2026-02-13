@@ -4,18 +4,18 @@ This directory contains documentation for all attributes used in the Semitexa fr
 
 ## Structure
 
-Each attribute has its own documentation file, referenced via the required `doc` parameter:
+Attributes can optionally reference a documentation file via the `doc` parameter:
 
 ```php
 #[AsRequest(
-    doc: 'docs/attributes/AsRequest.md',  // ← Documentation link (relative to project root)
+    doc: 'docs/attributes/AsRequest.md',  // optional: link to doc (relative to project root)
     path: '/api/users',
     methods: ['GET']
 )]
 class UserListRequest implements RequestInterface {}
 ```
 
-When framework docs live in `packages/semitexa/`, use a path relative to the **application** root (e.g. `packages/semitexa/core/docs/attributes/AsRequest.md`) or the path your `AttributeDocReader` expects.
+When framework docs live in `packages/semitexa/`, use a path relative to the **application** root (e.g. `packages/semitexa/core/docs/attributes/AsRequest.md`).
 
 ## Available attributes
 
@@ -38,30 +38,13 @@ Request/Handler classes must be in **modules** (`src/modules/`, `packages/`, or 
 - [GeneratedValue](GeneratedValue.md) - Auto-generated value
 - [TimestampColumn](TimestampColumn.md) - Timestamp columns
 
-## Usage for AI
-
-AI assistants can automatically read attribute documentation via `AttributeDocReader`:
-
-```php
-use Semitexa\Core\Attributes\AttributeDocReader;
-
-// Get documentation for a class
-$reflection = new \ReflectionClass(UserListRequest::class);
-$docs = AttributeDocReader::readClassAttributeDocs($reflection, $projectRoot);
-
-// Get documentation path from attribute
-$attr = $reflection->getAttributes(AsRequest::class)[0]->newInstance();
-$docPath = AttributeDocReader::getDocPath($attr);
-```
-
 ## Creating new attribute documentation
 
 When creating a new attribute:
 
 1. Create a documentation file in `docs/attributes/` (or `packages/semitexa/core/docs/attributes/` in monorepo).
-2. Add a required `doc` parameter to the attribute constructor.
-3. Implement `DocumentedAttributeInterface` or use `DocumentedAttributeTrait`.
-4. Fill the documentation with usage and examples.
+2. Optionally add a `doc` parameter to the attribute constructor to reference the file.
+3. Fill the documentation with usage and examples.
 
 ### Documentation template
 
@@ -109,7 +92,5 @@ Short description of what the attribute does.
 
 ## Benefits
 
-✅ **For AI**: Automatic documentation lookup from attributes  
-✅ **For developers**: Documentation is always close to the code  
-✅ **For IDEs**: Enables autocomplete and hints based on documentation  
-✅ **Validation**: You can enforce presence of documentation during development
+✅ **For developers**: Documentation is close to the code when `doc` is set  
+✅ **For IDEs**: Enables autocomplete and hints based on documentation

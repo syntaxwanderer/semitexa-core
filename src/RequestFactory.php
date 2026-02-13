@@ -35,15 +35,33 @@ class RequestFactory
             $rawContent = $swooleRequest->rawContent();
         }
         $content = ($rawContent !== false && $rawContent !== '') ? $rawContent : null;
-        
+
+        $method = strtoupper($swooleRequest->server['request_method'] ?? 'GET');
+        $post = $swooleRequest->post ?? [];
+        // Fallback: Swoole sometimes does not populate ->post for application/x-www-form-urlencoded
+        if ($method === 'POST' && $post === [] && $content !== null && $content !== '') {
+            $parsed = self::parseFormUrlEncoded($content);
+            if ($parsed !== []) {
+                $post = $parsed;
+            }
+        }
+
+        $cookies = $swooleRequest->cookie ?? [];
+        $cookieHeader = self::getHeader($swooleRequest->header ?? [], 'cookie');
+        if ($cookieHeader !== null && $cookieHeader !== '') {
+            $parsed = self::parseCookieHeader($cookieHeader);
+            // Prefer Swoole's values when both have the same key (Swoole second = overwrites parsed)
+            $cookies = array_merge($parsed, $cookies);
+        }
+
         return new Request(
-            method: $swooleRequest->server['request_method'] ?? 'GET',
+            method: $method,
             uri: $swooleRequest->server['request_uri'] ?? '/',
             headers: $swooleRequest->header ?? [],
             query: $swooleRequest->get ?? [],
-            post: $swooleRequest->post ?? [],
+            post: $post,
             server: array_merge($swooleRequest->server ?? [], ['SWOOLE_SERVER' => '1']),
-            cookies: $swooleRequest->cookie ?? [],
+            cookies: $cookies,
             content: $content
         );
     }
@@ -65,6 +83,51 @@ class RequestFactory
         );
     }
     
+    /**
+     * Parse application/x-www-form-urlencoded body (e.g. form POST).
+     */
+    private static function parseFormUrlEncoded(string $body): array
+    {
+        $decoded = [];
+        parse_str($body, $decoded);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private static function getHeader(array $headers, string $name): ?string
+    {
+        $nameLower = strtolower($name);
+        foreach ($headers as $k => $v) {
+            if (strtolower((string) $k) === $nameLower) {
+                return is_string($v) ? $v : (string) $v;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Parse Cookie header into [name => value, ...]. Used when Swoole ->cookie is empty.
+     */
+    private static function parseCookieHeader(string $header): array
+    {
+        $out = [];
+        foreach (explode(';', $header) as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            $eq = strpos($part, '=');
+            if ($eq === false) {
+                continue;
+            }
+            $name = trim(substr($part, 0, $eq));
+            $value = trim(substr($part, $eq + 1));
+            if ($name !== '') {
+                $out[$name] = $value;
+            }
+        }
+        return $out;
+    }
+
     private static function getHeaders(): array
     {
         $headers = [];

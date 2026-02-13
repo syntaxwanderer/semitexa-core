@@ -1,0 +1,13 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Console\Application;
+
+AttributeDiscovery::initialize();
+$application = new Application();
+$application->run();

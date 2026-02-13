@@ -28,49 +28,45 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
 
    Run `composer dump-autoload` in the **project root** after adding or changing module `composer.json`.
 
-3. **Create Request and Handler in the module namespace**  
-   Use namespace `Semitexa\Modules\{ModuleName}\...`, e.g. `Semitexa\Modules\Website\Application\Request\HomeRequest` and `Semitexa\Modules\Website\Application\Handler\HomeHandler`.
+3. **Create Request (Payload) and Handler in the module**  
+   Put **HTTP request DTOs** in **`Application/Payload/Request/`** (namespace `Semitexa\Modules\{ModuleName}\Application\Payload\Request\`). Put **HTTP handlers** in **`Application/Handler/Request/`**. See **MODULE_STRUCTURE.md** in this folder for the full Payload/Handlers layout.
 
-   **Example Request** — e.g. `src/modules/Website/Application/Request/HomeRequest.php`:
+   **Example Request** — e.g. `src/modules/Website/Application/Payload/Request/HomePayload.php`:
 
    ```php
    <?php
 
    declare(strict_types=1);
 
-   namespace Semitexa\Modules\Website\Application\Request;
+   namespace Semitexa\Modules\Website\Application\Payload\Request;
 
-   use Semitexa\Core\Attributes\AsRequest;
+   use Semitexa\Core\Attributes\AsPayload;
    use Semitexa\Core\Contract\RequestInterface;
+   use Semitexa\Modules\Website\Application\Resource\HomeResource;
 
-   #[AsRequest(
-       doc: 'docs/attributes/AsRequest.md',
-       path: '/',
-       methods: ['GET']
-   )]
-   class HomeRequest implements RequestInterface
+   #[AsPayload(path: '/', methods: ['GET'], responseWith: HomeResource::class)]
+   class HomePayload implements RequestInterface
    {
    }
    ```
 
-   **Example Handler** — e.g. `src/modules/Website/Application/Handler/HomeHandler.php`:
+   **Example Handler** — e.g. `src/modules/Website/Application/Handler/Request/HomeHandler.php`:
 
    ```php
    <?php
 
    declare(strict_types=1);
 
-   namespace Semitexa\Modules\Website\Application\Handler;
+   namespace Semitexa\Modules\Website\Application\Handler\Request;
 
-   use Semitexa\Core\Attributes\AsRequestHandler;
+   use Semitexa\Core\Attributes\AsPayloadHandler;
    use Semitexa\Core\Contract\RequestInterface;
    use Semitexa\Core\Contract\ResponseInterface;
    use Semitexa\Core\Response;
+   use Semitexa\Modules\Website\Application\Payload\Request\HomePayload;
+   use Semitexa\Modules\Website\Application\Resource\HomeResource;
 
-   #[AsRequestHandler(
-       doc: 'docs/attributes/AsRequestHandler.md',
-       for: HomeRequest::class
-   )]
+   #[AsPayloadHandler(payload: HomePayload::class, resource: HomeResource::class)]
    class HomeHandler
    {
        public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -80,11 +76,14 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
    }
    ```
 
-   Use the **recommended** layout from **vendor/semitexa/docs/AI_REFERENCE.md** → **Module Structure** (Standard Module Layout): `Application/Payload/` (Request DTOs), `Application/Resource/` (Response DTOs), `Application/Handler/Request/` (HTTP handlers), `Application/View/templates/` (Twig). Do not rely only on core/docs for folder names — read AI_REFERENCE first. The class must live under the **module namespace** (`Semitexa\Modules\Website\...`) and the module must have a valid `composer.json` with `"type": "semitexa-module"` and PSR-4 autoload.
+   Use the **recommended** layout: **`Application/Payload/Request/`** for HTTP request DTOs, **`Application/Resource/`** for response DTOs, **`Application/Handler/Request/`** for HTTP handlers, **`Application/View/templates/`** for Twig. See project **docs/MODULE_STRUCTURE.md** for the full Payload layout (Request, Session, Event) and Handlers by type. The class must live under the **module namespace** (`Semitexa\Modules\Website\...`) and the module must have a valid `composer.json` with `"type": "semitexa-module"` and PSR-4 autoload.
 
    The example above returns JSON. **For HTML pages** use a Response DTO with a Twig template — see the section **"Responses: JSON and HTML pages"** below (or AI_REFERENCE / guides in semitexa/docs).
 
-4. **Reload**  
+4. **Sync the registry**  
+   After adding or changing Request (Payload) classes, run **`bin/semitexa registry:sync:payloads`** (or **`bin/semitexa registry:sync`** to sync payloads and contracts). Routes are built from generated classes in `src/registry/Payloads/`; without this step the new page will not have a route. On `composer install`/`update` the Semitexa plugin runs `registry:sync` automatically.
+
+5. **Reload**  
    Restart the app (e.g. `bin/semitexa server:stop` then `bin/semitexa server:start`) or ensure your runtime picks up the new classes; the framework will discover the new Request/Handler from the module.
 
 ---
@@ -132,6 +131,9 @@ Place **all new routes** in a module (existing or new) under `src/modules/`, in 
 **Why don’t my Request/Handler in `src/Request/` or `src/Handler/` work (404)?**  
 Because route discovery only uses **modules**. Classes in the project `src/` with namespace `App\` are not scanned for `#[AsRequest]` / `#[AsRequestHandler]`. Create a module in `src/modules/` with a `composer.json` (`"type": "semitexa-module"` and PSR-4 autoload) and put your Request/Handler there. See the step-by-step above.
 
+**I added a new Payload and Handler but the route doesn't exist (404)?**  
+Routes are built from **generated** classes in `src/registry/Payloads/`. After adding or changing a Payload (or `#[AsPayloadPart]` traits), run **`bin/semitexa registry:sync:payloads`** (or **`bin/semitexa registry:sync`**). If you forget, the app will throw a clear error at startup telling you to run that command.
+
 **Can I patch `IntelligentAutoloader` or `AttributeDiscovery` to scan `App\`?**  
 Do not patch vendor. The supported way to add routes is via modules; changing framework discovery to scan `App\` would break the intended architecture (everything route-related lives in modules).
 
@@ -144,3 +146,4 @@ Do not patch vendor. The supported way to add routes is via modules; changing fr
 - **New pages/routes = only via modules** (`src/modules/`, `packages/`, or `vendor/`).
 - **Never** add new routes as `App\Request\*` / `App\Handler\*` in project `src/Request/` or `src/Handler/`.
 - Each module: directory, `composer.json` with `"type": "semitexa-module"` and PSR-4 (e.g. `Semitexa\Modules\Website\` → `.`); root has `Semitexa\Modules\` → `src/modules/`. Then Request/Handler classes with `#[AsRequest]` and `#[AsRequestHandler]` in that namespace.
+- **After adding or changing Payloads:** run **`bin/semitexa registry:sync:payloads`** (or **`bin/semitexa registry:sync`**) so routes are generated; `composer install`/`update` runs this automatically.

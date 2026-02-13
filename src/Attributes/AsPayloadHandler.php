@@ -11,13 +11,10 @@ use Semitexa\Core\Queue\HandlerExecution;
  * Marks a class as an HTTP payload (request) handler.
  * Match by (payload, resource): this handler runs for the given Payload and builds the given Resource.
  *
- * @see DocumentedAttributeInterface
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsPayloadHandler implements DocumentedAttributeInterface
+class AsPayloadHandler
 {
-    use DocumentedAttributeTrait;
-
     public readonly ?string $doc;
 
     public function __construct(
@@ -30,10 +27,5 @@ class AsPayloadHandler implements DocumentedAttributeInterface
         ?string $doc = null,
     ) {
         $this->doc = $doc;
-    }
-
-    public function getDocPath(): string
-    {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsPayloadHandler.md';
     }
 }

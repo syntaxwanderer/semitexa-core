@@ -75,15 +75,37 @@ readonly class Response implements ResponseInterface
     {
         return $this->headers;
     }
+
+    /**
+     * Return a new response with additional headers. Values can be string or string[] (e.g. multiple Set-Cookie).
+     */
+    public function withHeaders(array $headersToAdd): self
+    {
+        $merged = $this->headers;
+        foreach ($headersToAdd as $name => $value) {
+            if (is_array($value)) {
+                $merged[$name] = array_merge($merged[$name] ?? [], $value);
+            } else {
+                $merged[$name] = $value;
+            }
+        }
+        return new self($this->content, $this->statusCode, $merged);
+    }
     
     public function send(): void
     {
         // Set status code
         http_response_code($this->statusCode);
         
-        // Set headers
+        // Set headers (support multiple values, e.g. Set-Cookie)
         foreach ($this->headers as $name => $value) {
-            header("$name: $value");
+            if (is_array($value)) {
+                foreach ($value as $v) {
+                    header("$name: $v");
+                }
+            } else {
+                header("$name: $value");
+            }
         }
         
         // Output content

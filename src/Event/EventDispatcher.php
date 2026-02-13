@@ -83,7 +83,20 @@ final class EventDispatcher
             eventPayload: DtoSerializer::toArray($event),
         );
 
-        $transport = QueueTransportRegistry::create($transportName);
-        $transport->publish($queueName, $message->toJson());
+        try {
+            $transport = QueueTransportRegistry::create($transportName);
+            $transport->publish($queueName, $message->toJson());
+        } catch (\Throwable $e) {
+            // Queue unavailable (e.g. RabbitMQ not running): run listener synchronously so the request still succeeds
+            if (function_exists('error_log')) {
+                error_log(sprintf(
+                    'Semitexa EventDispatcher: queue "%s" unavailable (%s). Running listener "%s" synchronously.',
+                    $transportName,
+                    $e->getMessage(),
+                    $meta['class'] ?? 'unknown'
+                ));
+            }
+            $this->runListenerSync($meta, $event);
+        }
     }
 }

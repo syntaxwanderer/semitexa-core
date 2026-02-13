@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Semitexa\Core;
 
+use Semitexa\Core\Cookie\CookieJar;
+use Semitexa\Core\Cookie\CookieJarInterface;
 use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Log\LoggerInterface;
 use Semitexa\Core\Queue\HandlerExecution;
 use Semitexa\Core\Queue\QueueDispatcher;
+use Semitexa\Core\Session\Session;
+use Semitexa\Core\Session\SessionInterface;
+use Semitexa\Core\Session\SwooleTableSessionHandler;
 use Semitexa\Core\Tenancy\TenantResolver;
 use Semitexa\Core\Tenancy\TenantContext;
 use DI\Container;
@@ -68,6 +74,9 @@ class Application
         
         // Store tenant context in request-scoped container for access during request handling
         $this->requestScopedContainer->setTenantContext($tenantContext);
+
+        // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
+        $this->initSessionAndCookies($request);
         
         // Initialize attribute discovery
         AttributeDiscovery::initialize();
@@ -83,23 +92,25 @@ class Application
         $segmentStart = microtime(true);
         
         // Route found or not - no debug output needed
-        
+        $response = null;
         if ($route) {
-            return $this->handleRoute($route, $request);
-        }
-        
-        // For root path, try alternate form ('' vs '/') in case discovery registered the other
-        $path = $request->getPath();
-        if ($path === '/' || $path === '') {
-            $altPath = $path === '/' ? '' : '/';
-            $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
-            if ($route) {
-                return $this->handleRoute($route, $request);
+            $response = $this->handleRoute($route, $request);
+        } else {
+            $path = $request->getPath();
+            if ($path === '/' || $path === '') {
+                $altPath = $path === '/' ? '' : '/';
+                $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
+                if ($route) {
+                    $response = $this->handleRoute($route, $request);
+                } else {
+                    $response = $this->helloWorld($request);
+                }
+            } else {
+                $response = $this->notFound($request);
             }
-            return $this->helloWorld($request);
         }
 
-        return $this->notFound($request);
+        return $this->finalizeSessionAndCookies($request, $response);
         });
     }
     
@@ -354,6 +365,15 @@ class Application
             $response = $method === '__invoke' ? $controller() : $controller->$method();
             return $response;
         } catch (\Throwable $e) {
+            try {
+                $this->container->get(LoggerInterface::class)->error($e->getMessage(), [
+                    'exception' => get_debug_type($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
+            } catch (\Throwable) {
+                // avoid failing error handling when logger is unavailable
+            }
             return \Semitexa\Core\Http\ErrorRenderer::render($e, $request);
         }
         });
@@ -383,6 +403,48 @@ class Application
     private function notFound(Request $request): Response
     {
         return Response::notFound('The requested resource was not found');
+    }
+
+    private function initSessionAndCookies(Request $request): void
+    {
+        $cookieName = Environment::getEnvValue('SESSION_COOKIE_NAME') ?? 'semitexa_session';
+        $sessionId = $request->getCookie($cookieName, '');
+        if ($sessionId === '' || strlen($sessionId) !== 32) {
+            $sessionId = bin2hex(random_bytes(16));
+        }
+        $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
+        $handler = new SwooleTableSessionHandler();
+        $session = new Session($sessionId, $handler, $cookieName, $sessionLifetime);
+        $this->requestScopedContainer->set(SessionInterface::class, $session);
+        $this->requestScopedContainer->set(CookieJarInterface::class, new CookieJar($request));
+        $this->requestScopedContainer->set(Request::class, $request);
+    }
+
+    private function finalizeSessionAndCookies(Request $request, Response $response): Response
+    {
+        try {
+            $session = $this->requestScopedContainer->get(SessionInterface::class);
+            $cookieJar = $this->requestScopedContainer->get(CookieJarInterface::class);
+        } catch (\Throwable) {
+            return $response;
+        }
+
+        $session->save();
+
+        $cookieName = $session->getCookieName();
+        $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
+        $cookieJar->set($cookieName, $session->getSessionIdForCookie(), [
+            'path' => '/',
+            'httpOnly' => true,
+            'sameSite' => 'lax',
+            'maxAge' => $sessionLifetime,
+        ]);
+
+        $lines = $cookieJar->getSetCookieLines();
+        if ($lines !== []) {
+            $response = $response->withHeaders(['Set-Cookie' => $lines]);
+        }
+        return $response;
     }
 
     private function debugLog(string $hypothesisId, string $location, string $message, array $data, string $runId): void
