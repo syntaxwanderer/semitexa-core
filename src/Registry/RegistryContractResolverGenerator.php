@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Registry;
 
 use ReflectionClass;
+use Semitexa\Core\Util\ProjectRoot;
 
 /**
  * Generates contract resolver classes in src/registry/Contracts/ when an interface
@@ -28,7 +29,7 @@ class RegistryContractResolverGenerator
      */
     public static function generateAll(array $contractDetails): array
     {
-        $root = self::getProjectRoot();
+        $root = ProjectRoot::get();
         $outDir = $root . '/' . self::REGISTRY_CONTRACTS_DIR;
         if (!is_dir($outDir)) {
             mkdir($outDir, 0755, true);
@@ -57,7 +58,7 @@ class RegistryContractResolverGenerator
      */
     public static function generateAllFactories(array $contractDetails): array
     {
-        $root = self::getProjectRoot();
+        $root = ProjectRoot::get();
         $outDir = $root . '/' . self::REGISTRY_CONTRACTS_DIR;
         if (!is_dir($outDir)) {
             mkdir($outDir, 0755, true);
@@ -214,17 +215,6 @@ PHP;
         return self::REGISTRY_NAMESPACE . '\\' . $factoryShortName;
     }
 
-    public static function getProjectRoot(): string
-    {
-        $dir = __DIR__;
-        while ($dir !== '' && $dir !== '/') {
-            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
-                return $dir;
-            }
-            $dir = dirname($dir);
-        }
-        return dirname(__DIR__, 4);
-    }
 
     /**
      * @param list<array{module: string, class: string}> $implementations

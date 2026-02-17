@@ -8,8 +8,10 @@ use ReflectionClass;
 use Semitexa\Core\Attributes\AsPayload;
 use Semitexa\Core\Attributes\AsPayloadPart;
 use Semitexa\Core\Config\EnvValueResolver;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
+use Semitexa\Core\Util\CodeGenHelper;
+use Semitexa\Core\Util\ProjectRoot;
 
 /**
  * Generates PHP payload classes in src/registry/Payloads/ that extend the original and use all AsPayloadPart traits.
@@ -32,17 +34,6 @@ class RegistryPayloadGenerator
     /** @var array<string, array{class: string, short: string, attr: AsPayload, file: string, module: array}> */
     private static array $definitions = [];
 
-    public static function getProjectRoot(): string
-    {
-        $dir = __DIR__;
-        while ($dir !== '' && $dir !== '/') {
-            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
-                return $dir;
-            }
-            $dir = dirname($dir);
-        }
-        return dirname(__DIR__, 4);
-    }
 
     /**
      * Generate all registry payload classes and return manifest data.
@@ -54,7 +45,7 @@ class RegistryPayloadGenerator
     public static function generateAll(array $payloads, array $payloadParts): array
     {
         self::bootstrap();
-        $root = self::getProjectRoot();
+        $root = ProjectRoot::get();
         $outDir = $root . '/' . self::REGISTRY_PAYLOADS_DIR;
         if (!is_dir($outDir)) {
             mkdir($outDir, 0755, true);
@@ -92,7 +83,7 @@ class RegistryPayloadGenerator
         if (self::$bootstrapped) {
             return;
         }
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         ModuleRegistry::initialize();
         self::$definitions = self::collectDefinitions();
         self::$bootstrapped = true;
@@ -101,7 +92,7 @@ class RegistryPayloadGenerator
     private static function collectDefinitions(): array
     {
         $definitions = [];
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsPayload::class);
+        $classes = ClassDiscovery::findClassesWithAttribute(AsPayload::class);
         foreach ($classes as $className) {
             try {
                 $ref = new ReflectionClass($className);
@@ -115,7 +106,7 @@ class RegistryPayloadGenerator
                     'short' => $ref->getShortName(),
                     'attr' => $attr,
                     'file' => $ref->getFileName() ?: '',
-                    'module' => self::detectModule($ref->getFileName() ?: ''),
+                    'module' => CodeGenHelper::detectModule($ref->getFileName() ?: ''),
                 ];
             } catch (\Throwable $e) {
                 // skip
@@ -124,30 +115,6 @@ class RegistryPayloadGenerator
         return $definitions;
     }
 
-    private static function detectModule(string $file): array
-    {
-        $default = ['name' => 'project', 'studly' => 'Project'];
-        if ($file === '') {
-            return $default;
-        }
-        foreach (ModuleRegistry::getModules() as $module) {
-            $path = $module['path'] ?? null;
-            if ($path && str_starts_with($file, rtrim($path, '/') . '/')) {
-                return [
-                    'name' => $module['name'] ?? 'module',
-                    'studly' => self::slugToStudly($module['name'] ?? 'module'),
-                ];
-            }
-        }
-        return $default;
-    }
-
-    private static function slugToStudly(string $slug): string
-    {
-        $parts = preg_split('/[-_]/', $slug);
-        $parts = array_map(static fn($p) => ucfirst(strtolower($p)), $parts);
-        return implode('', $parts);
-    }
 
     /**
      * @param array<string, array{class: string, base: string, module: string, file: string}> $payloadParts
@@ -201,35 +168,35 @@ class RegistryPayloadGenerator
                 "Registry payload base class {$baseClass} is final. Module payloads must not be final so registry can extend them (single source of truth: src/registry/Payloads)."
             );
         }
-        $baseAlias = self::registerImport($baseClass, $imports, $used, 'Base');
+        $baseAlias = CodeGenHelper::registerImport($baseClass, $imports, $used, 'Base');
         $traitAliases = [];
         foreach ($parts as $p) {
-            $traitAliases[] = self::registerImport($p['trait'], $imports, $used);
+            $traitAliases[] = CodeGenHelper::registerImport($p['trait'], $imports, $used);
         }
 
         $attrMap = [];
-        $attrMap['path'] = "path: " . self::exportValue(EnvValueResolver::resolve($attr->path));
+        $attrMap['path'] = "path: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->path));
         if ($attr->methods !== null && $attr->methods !== []) {
-            $attrMap['methods'] = "methods: " . self::exportValue(EnvValueResolver::resolve($attr->methods));
+            $attrMap['methods'] = "methods: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->methods));
         }
         if ($attr->name !== null && $attr->name !== '') {
-            $attrMap['name'] = "name: " . self::exportValue(EnvValueResolver::resolve($attr->name));
+            $attrMap['name'] = "name: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->name));
         }
         if ($attr->responseWith !== null && $attr->responseWith !== '') {
             $responseClass = EnvValueResolver::resolve($attr->responseWith);
-            $attrMap['responseWith'] = "responseWith: " . self::registerImport($responseClass, $imports, $used) . "::class";
+            $attrMap['responseWith'] = "responseWith: " . CodeGenHelper::registerImport($responseClass, $imports, $used) . "::class";
         }
         if ($attr->requirements !== null && $attr->requirements !== []) {
-            $attrMap['requirements'] = "requirements: " . self::exportValue(EnvValueResolver::resolve($attr->requirements));
+            $attrMap['requirements'] = "requirements: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->requirements));
         }
         if ($attr->defaults !== null && $attr->defaults !== []) {
-            $attrMap['defaults'] = "defaults: " . self::exportValue(EnvValueResolver::resolve($attr->defaults));
+            $attrMap['defaults'] = "defaults: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->defaults));
         }
         if ($attr->options !== null && $attr->options !== []) {
-            $attrMap['options'] = "options: " . self::exportValue(EnvValueResolver::resolve($attr->options));
+            $attrMap['options'] = "options: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->options));
         }
         if ($attr->tags !== null && $attr->tags !== []) {
-            $attrMap['tags'] = "tags: " . self::exportValue(EnvValueResolver::resolve($attr->tags));
+            $attrMap['tags'] = "tags: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->tags));
         }
         if ($attr->public !== null) {
             $attrMap['public'] = "public: " . ($attr->public ? 'true' : 'false');
@@ -355,42 +322,4 @@ PHP;
         return $order;
     }
 
-    private static function registerImport(string $fqn, array &$imports, array &$used, ?string $preferred = null): string
-    {
-        $fqn = ltrim($fqn, '\\');
-        $pos = strrpos($fqn, '\\');
-        $short = $pos === false ? $fqn : substr($fqn, $pos + 1);
-        $alias = $preferred ?? $short;
-        $c = 2;
-        while (isset($used[$alias]) && $used[$alias] !== $fqn) {
-            $alias = $short . $c++;
-        }
-        $used[$alias] = $fqn;
-        $imports[] = ['fqn' => $fqn, 'short' => $short, 'alias' => $alias];
-        return $alias;
-    }
-
-    private static function exportValue(mixed $value): string
-    {
-        if (is_array($value)) {
-            if ($value === []) {
-                return '[]';
-            }
-            $items = [];
-            foreach ($value as $k => $v) {
-                $items[] = is_int($k) ? self::exportValue($v) : self::exportValue($k) . ' => ' . self::exportValue($v);
-            }
-            return '[' . implode(', ', $items) . ']';
-        }
-        if (is_bool($value)) {
-            return $value ? 'true' : 'false';
-        }
-        if (is_string($value)) {
-            return "'" . addslashes($value) . "'";
-        }
-        if ($value === null) {
-            return 'null';
-        }
-        return (string) $value;
-    }
 }

@@ -6,7 +6,7 @@ namespace Semitexa\Core\Event;
 
 use Semitexa\Core\Attributes\AsEventListener;
 use Semitexa\Core\Event\EventExecution;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\Config\EnvValueResolver;
 use ReflectionClass;
@@ -35,10 +35,10 @@ final class EventListenerRegistry
         if (self::$built) {
             return;
         }
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         ModuleRegistry::initialize();
 
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsEventListener::class);
+        $classes = ClassDiscovery::findClassesWithAttribute(AsEventListener::class);
         $filtered = array_filter(
             $classes,
             fn(string $class) => (str_starts_with($class, 'Semitexa\\') && self::isModuleActiveForClass($class))

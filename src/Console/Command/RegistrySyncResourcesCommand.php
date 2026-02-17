@@ -7,7 +7,7 @@ namespace Semitexa\Core\Console\Command;
 use ReflectionClass;
 use Semitexa\Core\Attributes\AsResource;
 use Semitexa\Core\Attributes\AsResourcePart;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\Registry\RegistryPayloadGenerator;
 use Semitexa\Core\Registry\RegistryResourceGenerator;
@@ -37,7 +37,7 @@ class RegistrySyncResourcesCommand extends BaseCommand
 
         $this->ensureRegistryDirs($root);
 
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         ModuleRegistry::initialize();
 
         $resources = $this->collectResources();
@@ -101,7 +101,7 @@ class RegistrySyncResourcesCommand extends BaseCommand
     private function collectResources(): array
     {
         $classes = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsResource::class),
+            ClassDiscovery::findClassesWithAttribute(AsResource::class),
             fn(string $class) => str_starts_with($class, 'Semitexa\\') && $this->isModuleActiveForClass($class)
         );
         $out = [];
@@ -128,7 +128,7 @@ class RegistrySyncResourcesCommand extends BaseCommand
     private function collectResourceParts(): array
     {
         $classes = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsResourcePart::class),
+            ClassDiscovery::findClassesWithAttribute(AsResourcePart::class),
             fn(string $class) => str_starts_with($class, 'Semitexa\\') && $this->isModuleActiveForClass($class)
         );
         $out = [];

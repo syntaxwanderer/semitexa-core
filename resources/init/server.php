@@ -49,10 +49,12 @@ $server->on('request', function ($request, $response) use ($app, $env) {
     } catch (\Throwable $e) {
         $response->status(500);
         $response->header('Content-Type', 'application/json');
-        $response->end(json_encode([
-            'error' => 'Internal Server Error',
-            'message' => $e->getMessage(),
-        ]));
+        $payload = ['error' => 'Internal Server Error'];
+        if ($env->appDebug) {
+            $payload['message'] = $e->getMessage();
+            $payload['trace'] = $e->getTraceAsString();
+        }
+        $response->end(json_encode($payload));
     } finally {
         $app->getRequestScopedContainer()->reset();
     }

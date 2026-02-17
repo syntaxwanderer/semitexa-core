@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Core\CodeGen;
 
 use Semitexa\Core\ModuleRegistry;
+use Semitexa\Core\Util\CodeGenHelper;
+use Semitexa\Core\Util\ProjectRoot;
 
 class LayoutGenerator
 {
@@ -72,7 +74,7 @@ class LayoutGenerator
     private static function collectLayouts(): array
     {
         $result = [];
-        $projectRoot = self::getProjectRoot();
+        $projectRoot = ProjectRoot::get();
 
         foreach (ModuleRegistry::getModules() as $module) {
             $modulePath = $module['path'] ?? null;
@@ -90,7 +92,7 @@ class LayoutGenerator
             }
 
             $moduleName = $module['name'] ?? 'module';
-            $studly = self::slugToStudly($moduleName);
+            $studly = CodeGenHelper::slugToStudly($moduleName);
 
             foreach ($files as $file) {
                 $handle = basename($file, '.html.twig');
@@ -172,33 +174,7 @@ class LayoutGenerator
         return true;
     }
 
-    private static function slugToStudly(string $slug): string
-    {
-        $parts = preg_split('/[-_]/', $slug);
-        $parts = array_map(static fn ($p) => ucfirst(strtolower($p)), array_filter($parts));
 
-        return $parts === [] ? 'Module' : implode('', $parts);
-    }
-
-    private static function getProjectRoot(): string
-    {
-        static $root = null;
-        if ($root !== null) {
-            return $root;
-        }
-
-        $dir = dirname(__DIR__, 4);
-        while ($dir !== '/' && !is_file($dir . '/composer.json')) {
-            $parent = dirname($dir);
-            if ($parent === $dir) {
-                break;
-            }
-            $dir = $parent;
-        }
-
-        $root = $dir;
-        return $root;
-    }
 }
 
 

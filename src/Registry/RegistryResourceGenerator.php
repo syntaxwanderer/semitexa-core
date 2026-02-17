@@ -9,8 +9,10 @@ use Semitexa\Core\Attributes\AsResource;
 use Semitexa\Core\Attributes\AsResourcePart;
 use Semitexa\Core\Config\EnvValueResolver;
 use Semitexa\Core\Http\Response\ResponseFormat;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
+use Semitexa\Core\Util\CodeGenHelper;
+use Semitexa\Core\Util\ProjectRoot;
 
 /**
  * Generates PHP resource classes in src/registry/Resources/ that extend the original and use all AsResourcePart traits.
@@ -32,17 +34,6 @@ class RegistryResourceGenerator
     /** @var array<string, array{class: string, short: string, attr: AsResource, file: string, module: array}> */
     private static array $definitions = [];
 
-    public static function getProjectRoot(): string
-    {
-        $dir = __DIR__;
-        while ($dir !== '' && $dir !== '/') {
-            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
-                return $dir;
-            }
-            $dir = dirname($dir);
-        }
-        return dirname(__DIR__, 4);
-    }
 
     /**
      * Generate all registry resource classes and return manifest data.
@@ -54,7 +45,7 @@ class RegistryResourceGenerator
     public static function generateAll(array $resources, array $resourceParts): array
     {
         self::bootstrap();
-        $root = self::getProjectRoot();
+        $root = ProjectRoot::get();
         $outDir = $root . '/' . self::REGISTRY_RESOURCES_DIR;
         if (!is_dir($outDir)) {
             mkdir($outDir, 0755, true);
@@ -92,7 +83,7 @@ class RegistryResourceGenerator
         if (self::$bootstrapped) {
             return;
         }
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         ModuleRegistry::initialize();
         self::$definitions = self::collectDefinitions();
         self::$bootstrapped = true;
@@ -101,7 +92,7 @@ class RegistryResourceGenerator
     private static function collectDefinitions(): array
     {
         $definitions = [];
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsResource::class);
+        $classes = ClassDiscovery::findClassesWithAttribute(AsResource::class);
         foreach ($classes as $className) {
             try {
                 $ref = new ReflectionClass($className);
@@ -115,7 +106,7 @@ class RegistryResourceGenerator
                     'short' => $ref->getShortName(),
                     'attr' => $attr,
                     'file' => $ref->getFileName() ?: '',
-                    'module' => self::detectModule($ref->getFileName() ?: ''),
+                    'module' => CodeGenHelper::detectModule($ref->getFileName() ?: ''),
                 ];
             } catch (\Throwable $e) {
                 // skip
@@ -124,30 +115,6 @@ class RegistryResourceGenerator
         return $definitions;
     }
 
-    private static function detectModule(string $file): array
-    {
-        $default = ['name' => 'project', 'studly' => 'Project'];
-        if ($file === '') {
-            return $default;
-        }
-        foreach (ModuleRegistry::getModules() as $module) {
-            $path = $module['path'] ?? null;
-            if ($path && str_starts_with($file, rtrim($path, '/') . '/')) {
-                return [
-                    'name' => $module['name'] ?? 'module',
-                    'studly' => self::slugToStudly($module['name'] ?? 'module'),
-                ];
-            }
-        }
-        return $default;
-    }
-
-    private static function slugToStudly(string $slug): string
-    {
-        $parts = preg_split('/[-_]/', $slug);
-        $parts = array_map(static fn($p) => ucfirst(strtolower($p)), $parts);
-        return implode('', $parts);
-    }
 
     /**
      * @param array<string, array{class: string, base: string, module: string, file: string}> $resourceParts
@@ -203,25 +170,25 @@ class RegistryResourceGenerator
             }
         }
 
-        $baseAlias = self::registerImport($baseClass, $imports, $used, 'Base');
+        $baseAlias = CodeGenHelper::registerImport($baseClass, $imports, $used, 'Base');
         $traitAliases = [];
         foreach ($parts as $p) {
-            $traitAliases[] = self::registerImport($p['trait'], $imports, $used);
+            $traitAliases[] = CodeGenHelper::registerImport($p['trait'], $imports, $used);
         }
 
         $attrMap = [];
         if ($attr->handle !== null && $attr->handle !== '') {
-            $attrMap['handle'] = "handle: " . self::exportValue(EnvValueResolver::resolve($attr->handle));
+            $attrMap['handle'] = "handle: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->handle));
         }
         if ($attr->context !== null && $attr->context !== []) {
-            $attrMap['context'] = "context: " . self::exportValue(EnvValueResolver::resolve($attr->context));
+            $attrMap['context'] = "context: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->context));
         }
         if ($attr->format !== null) {
             $formatVal = $attr->format instanceof ResponseFormat ? $attr->format->value : (string) $attr->format;
             $attrMap['format'] = "format: ResponseFormat::" . ucfirst(strtolower($formatVal));
         }
         if ($attr->renderer !== null && $attr->renderer !== '') {
-            $attrMap['renderer'] = "renderer: " . self::exportValue(EnvValueResolver::resolve($attr->renderer));
+            $attrMap['renderer'] = "renderer: " . CodeGenHelper::exportValue(EnvValueResolver::resolve($attr->renderer));
         }
 
         $attrLines = self::orderAttributeLines($attrMap, $outPath);
@@ -341,42 +308,4 @@ PHP;
         return $order;
     }
 
-    private static function registerImport(string $fqn, array &$imports, array &$used, ?string $preferred = null): string
-    {
-        $fqn = ltrim($fqn, '\\');
-        $pos = strrpos($fqn, '\\');
-        $short = $pos === false ? $fqn : substr($fqn, $pos + 1);
-        $alias = $preferred ?? $short;
-        $c = 2;
-        while (isset($used[$alias]) && $used[$alias] !== $fqn) {
-            $alias = $short . $c++;
-        }
-        $used[$alias] = $fqn;
-        $imports[] = ['fqn' => $fqn, 'short' => $short, 'alias' => $alias];
-        return $alias;
-    }
-
-    private static function exportValue(mixed $value): string
-    {
-        if (is_array($value)) {
-            if ($value === []) {
-                return '[]';
-            }
-            $items = [];
-            foreach ($value as $k => $v) {
-                $items[] = is_int($k) ? self::exportValue($v) : self::exportValue($k) . ' => ' . self::exportValue($v);
-            }
-            return '[' . implode(', ', $items) . ']';
-        }
-        if (is_bool($value)) {
-            return $value ? 'true' : 'false';
-        }
-        if (is_string($value)) {
-            return "'" . addslashes($value) . "'";
-        }
-        if ($value === null) {
-            return 'null';
-        }
-        return (string) $value;
-    }
 }

@@ -8,6 +8,7 @@ use Semitexa\Core\Queue\Message\QueuedEventListenerMessage;
 use Semitexa\Core\Queue\Message\QueuedHandlerMessage;
 use Semitexa\Core\Support\DtoSerializer;
 use Semitexa\Core\Container\ContainerFactory;
+use Semitexa\Core\Util\ProjectRoot;
 
 class QueueWorker
 {
@@ -15,7 +16,7 @@ class QueueWorker
 
     public function __construct()
     {
-        $this->statsFile = $this->getProjectRoot() . '/var/queue-stats.json';
+        $this->statsFile = ProjectRoot::get() . '/var/queue-stats.json';
         @mkdir(dirname($this->statsFile), 0777, true);
         
         // Initialize stats if file doesn't exist
@@ -156,20 +157,6 @@ class QueueWorker
         file_put_contents($this->statsFile, json_encode($stats));
     }
     
-    private function getProjectRoot(): string
-    {
-        $dir = __DIR__;
-        while ($dir !== '/' && $dir !== '') {
-            if (file_exists($dir . '/composer.json')) {
-                if (is_dir($dir . '/src/modules')) {
-                    return $dir;
-                }
-            }
-            $dir = dirname($dir);
-        }
-        return dirname(__DIR__, 5);
-    }
-
 
     private function hydrateDto(string $class, array $payload): object
     {

@@ -121,259 +121,277 @@ class Application
     {
         return self::measure('Application::handleRoute', function() use ($route, $request) {
             try {
-            // Request/Handler flow
-            if (($route['type'] ?? null) === 'http-request') {
-                $runId = 'initial';
-                $requestClass = $route['class'];
-                $responseClass = $route['responseClass'] ?? null;
-                $handlerClasses = $route['handlers'] ?? [];
-                $segmentStart = microtime(true);
-
-                // Instantiate DTOs
-                $reqDto = class_exists($requestClass) ? new $requestClass() : null;
-                if (!$reqDto) {
-                    throw new \RuntimeException("Cannot instantiate request class: {$requestClass}");
-                }
-                
-                // Hydrate Request DTO from HTTP Request data
-                try {
-                    $reqDto = \Semitexa\Core\Http\RequestDtoHydrator::hydrate($reqDto, $request);
-                    // Allow DTO to access HTTP Request if it has setHttpRequest method
-                    if (method_exists($reqDto, 'setHttpRequest')) {
-                        $reqDto->setHttpRequest($request);
-                    }
-                } catch (\Throwable $e) {
-                    // Continue with empty DTO if hydration fails
-                }
-
-                // Validate payload: strict types + constraint attributes. Reject invalid input with 422.
-                $validationResult = \Semitexa\Core\Http\PayloadValidator::validate($reqDto, $request);
-                if (!$validationResult->isValid()) {
-                    return Response::json(['errors' => $validationResult->getErrors()], 422);
-                }
-
-                $this->debugLog('H2', 'Application::handleRoute', 'request_hydrated', [
-                    'requestClass' => $requestClass,
-                    'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),
-                ], $runId);
-                $segmentStart = microtime(true);
-                
-                $resDto = ($responseClass && class_exists($responseClass)) ? new $responseClass() : null;
-
-                // Fallback generic response if none supplied
-                if ($resDto === null) {
-                    $resDto = new \Semitexa\Core\Http\Response\GenericResponse();
-                }
-
-                // Apply AsResource defaults if present
-                if ($resDto) {
-                    $resolvedResponse = \Semitexa\Core\Discovery\AttributeDiscovery::getResolvedResponseAttributes(get_class($resDto));
-                    if ($resolvedResponse) {
-                        if (isset($resolvedResponse['handle']) && $resolvedResponse['handle'] && method_exists($resDto, 'setRenderHandle')) {
-                            $resDto->setRenderHandle($resolvedResponse['handle']);
-                        }
-                        if (isset($resolvedResponse['context']) && method_exists($resDto, 'setRenderContext')) {
-                            $resDto->setRenderContext($resolvedResponse['context']);
-                        }
-                        if (array_key_exists('format', $resolvedResponse) && method_exists($resDto, 'setRenderFormat')) {
-                            $resDto->setRenderFormat($resolvedResponse['format']);
-                        }
-                        if (isset($resolvedResponse['renderer']) && method_exists($resDto, 'setRendererClass')) {
-                            $resDto->setRendererClass($resolvedResponse['renderer']);
-                        }
-                    }
-                    // Fallback: try to read attribute directly (for cases where getResolvedResponseAttributes returns null)
-                    if (!method_exists($resDto, 'getRenderHandle') || !$resDto->getRenderHandle()) {
-                        try {
-                            $r = new \ReflectionClass($resDto);
-                            $attrs = $r->getAttributes(\Semitexa\Core\Attributes\AsResource::class);
-                            if (!empty($attrs)) {
-                                $a = $attrs[0]->newInstance();
-                                if (method_exists($resDto, 'setRenderHandle') && $a->handle) {
-                                    $resDto->setRenderHandle($a->handle);
-                                }
-                                if (method_exists($resDto, 'setRenderContext') && isset($a->context)) {
-                                    $resDto->setRenderContext($a->context);
-                                }
-                                if (method_exists($resDto, 'setRenderFormat') && $a->format) {
-                                    $resDto->setRenderFormat($a->format);
-                                }
-                                if (method_exists($resDto, 'setRendererClass') && $a->renderer) {
-                                    $resDto->setRendererClass($a->renderer);
-                                }
-                            }
-                            // If still no handle, try parent class
-                            if (!method_exists($resDto, 'getRenderHandle') || !$resDto->getRenderHandle()) {
-                                $parent = $r->getParentClass();
-                                if ($parent) {
-                                    $parentAttrs = $parent->getAttributes(\Semitexa\Core\Attributes\AsResource::class);
-                                    if (!empty($parentAttrs)) {
-                                        $parentAttr = $parentAttrs[0]->newInstance();
-                                        if (method_exists($resDto, 'setRenderHandle') && $parentAttr->handle) {
-                                            $resDto->setRenderHandle($parentAttr->handle);
-                                        }
-                                        if (method_exists($resDto, 'setRenderFormat') && $parentAttr->format) {
-                                            $resDto->setRenderFormat($parentAttr->format);
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (\Throwable $e) {
-                            // ignore
-                        }
-                    }
-                }
-
-                // Execute handlers in order
-                foreach ($handlerClasses as $handlerMeta) {
-                    $handlerClass = is_array($handlerMeta) ? ($handlerMeta['class'] ?? null) : $handlerMeta;
-                    if (!$handlerClass) {
-                        continue;
+                if (($route['type'] ?? null) === 'http-request') {
+                    [$reqDto, $validationResponse] = $this->hydrateRequestDto($route, $request);
+                    if ($validationResponse) {
+                        return $validationResponse;
                     }
 
-                    $execution = $handlerMeta['execution'] ?? HandlerExecution::Sync->value;
-                    if ($execution === HandlerExecution::Async->value) {
-                        QueueDispatcher::enqueue(
-                            is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $requestClass],
-                            $reqDto,
-                            $resDto
-                        );
-                        continue;
-                    }
-
-                    if (!class_exists($handlerClass)) {
-                        continue;
-                    }
-                    
-                    // Use request-scoped container to resolve handler (do not cache: handler must get
-                    // the same CookieJar as in finalizeSessionAndCookies, so cookies set in handler are sent).
-                    try {
-                        $handlerStart = microtime(true);
-                        $handler = $this->requestScopedContainer->get($handlerClass);
-                    } catch (\Throwable $e) {
-                        // Don't fallback to direct instantiation - it won't work with property injection
-                        // Instead, throw the error so we can see what's wrong
-                        throw new \RuntimeException("Failed to resolve handler {$handlerClass}: " . $e->getMessage(), 0, $e);
-                    }
-                    
-                    if (method_exists($handler, 'handle')) {
-                        $resDto = $handler->handle($reqDto, $resDto);
-                        $this->debugLog('H2', 'Application::handleRoute', 'handler_completed', [
-                            'handler' => $handlerClass,
-                            'duration_ms' => round((microtime(true) - $handlerStart) * 1000, 2),
-                        ], $runId);
-                    }
+                    $resDto = $this->resolveResponseDto($route);
+                    $resDto = $this->executeHandlers($route['handlers'] ?? [], $route['class'], $reqDto, $resDto);
+                    $resDto = $this->renderResponse($resDto, $reqDto);
+                    return $this->adaptResponse($resDto);
                 }
 
-                // Centralized rendering step (if requested by handlers)
-                if (method_exists($resDto, 'getRenderHandle')) {
-                    $handle = $resDto->getRenderHandle();
-                    if ($handle) {
-                        $renderStart = microtime(true);
-                        $context = method_exists($resDto, 'getRenderContext') ? $resDto->getRenderContext() : [];
-                        $format = method_exists($resDto, 'getRenderFormat') ? $resDto->getRenderFormat() : null;
-                        if ($format === null) {
-                            // default to layout when handle provided
-                            $format = \Semitexa\Core\Http\Response\ResponseFormat::Layout;
-                        }
-                        $rendererClass = method_exists($resDto, 'getRendererClass') ? $resDto->getRendererClass() : null;
-
-                        if ($format === \Semitexa\Core\Http\Response\ResponseFormat::Json) {
-                            $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                            if (method_exists($resDto, 'setContent')) {
-                                $resDto->setContent($json ?: '');
-                            }
-                            if (method_exists($resDto, 'setHeader')) {
-                                $resDto->setHeader('Content-Type', 'application/json');
-                            }
-                        } elseif ($format === \Semitexa\Core\Http\Response\ResponseFormat::Layout) {
-                            // Use provided renderer or default LayoutRenderer (from semitexa/core-frontend)
-                            $renderer = $rendererClass ?: 'Semitexa\\Frontend\\Layout\\LayoutRenderer';
-                            if (!class_exists($renderer)) {
-                                throw new \RuntimeException(
-                                    'LayoutRenderer not found. For HTML pages install semitexa/core-frontend: composer require semitexa/core-frontend. Do not implement a custom Twig renderer in the project.'
-                                );
-                            }
-                            if (!method_exists($renderer, 'renderHandle')) {
-                                throw new \RuntimeException(
-                                    'LayoutRenderer::renderHandle not found. Use semitexa/core-frontend for HTML rendering. Do not implement a custom renderer in the project.'
-                                );
-                            }
-                            // Automatically wrap context in 'response' key if not already present
-                            // This allows templates to access context as response.error, response.data, etc.
-                            if (!isset($context['response'])) {
-                                $context = ['response' => $context] + $context;
-                            }
-                            // Add request to context if available
-                            if (!isset($context['request']) && isset($reqDto)) {
-                                $context['request'] = $reqDto;
-                            }
-                            // Layout frame (e.g. one-column) for layout-level slots
-                            if (method_exists($resDto, 'getLayoutFrame') && $resDto->getLayoutFrame() !== null) {
-                                $context['layout_frame'] = $resDto->getLayoutFrame();
-                            }
-                            $html = $renderer::renderHandle($handle, $context);
-                            if (method_exists($resDto, 'setContent')) {
-                                $resDto->setContent($html);
-                            }
-                            if (method_exists($resDto, 'setHeader')) {
-                                $resDto->setHeader('Content-Type', 'text/html; charset=utf-8');
-                            }
-                        } else {
-                            // raw/no-op
-                        }
-                        $this->debugLog('H3', 'Application::handleRoute', 'render_completed', [
-                            'handle' => $handle,
-                            'format' => is_object($format) && property_exists($format, 'value') ? $format->value : $format,
-                            'renderer' => $rendererClass ?: ($renderer ?? null),
-                            'duration_ms' => round((microtime(true) - $renderStart) * 1000, 2),
-                        ], $runId);
-                    }
-                }
-
-                // Adapt to core Response
-                // If handler returned a Core Response directly, use it
-                if ($resDto instanceof \Semitexa\Core\Response) {
-                    return $resDto;
-                }
-                
-                // If response DTO has toCoreResponse method, use it
-                if (method_exists($resDto, 'toCoreResponse')) {
-                    return $resDto->toCoreResponse();
-                }
-                
-                // Generic fallback
-                return Response::json(['ok' => true]);
+                return $this->handleLegacyRoute($route);
+            } catch (\Throwable $e) {
+                return $this->handleRouteException($e, $route, $request);
             }
-
-            // Legacy controller flow
-            $controller = new $route['class']();
-            $method = $route['method'];
-            $response = $method === '__invoke' ? $controller() : $controller->$method();
-            return $response;
-        } catch (\Throwable $e) {
-            if ($e instanceof \Semitexa\Core\Http\Exception\NotFoundException) {
-                $currentRouteName = $route['name'] ?? null;
-                if ($currentRouteName !== self::ROUTE_NAME_404) {
-                    $route404 = AttributeDiscovery::findRouteByName(self::ROUTE_NAME_404);
-                    if ($route404 !== null) {
-                        return $this->handleRoute($route404, $request);
-                    }
-                }
-                return Response::notFound($e->getMessage() ?: 'The requested resource was not found');
-            }
-            try {
-                $this->container->get(LoggerInterface::class)->error($e->getMessage(), [
-                    'exception' => get_debug_type($e),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                ]);
-            } catch (\Throwable) {
-                // avoid failing error handling when logger is unavailable
-            }
-            return \Semitexa\Core\Http\ErrorRenderer::render($e, $request);
-        }
         });
+    }
+
+    /**
+     * @return array{0: object, 1: ?Response}
+     */
+    private function hydrateRequestDto(array $route, Request $request): array
+    {
+        $requestClass = $route['class'];
+        $segmentStart = microtime(true);
+
+        $reqDto = class_exists($requestClass) ? new $requestClass() : null;
+        if (!$reqDto) {
+            throw new \RuntimeException("Cannot instantiate request class: {$requestClass}");
+        }
+
+        try {
+            $reqDto = \Semitexa\Core\Http\RequestDtoHydrator::hydrate($reqDto, $request);
+            if (method_exists($reqDto, 'setHttpRequest')) {
+                $reqDto->setHttpRequest($request);
+            }
+        } catch (\Throwable $e) {
+            // Continue with empty DTO if hydration fails
+        }
+
+        $validationResult = \Semitexa\Core\Http\PayloadValidator::validate($reqDto, $request);
+        if (!$validationResult->isValid()) {
+            return [$reqDto, Response::json(['errors' => $validationResult->getErrors()], 422)];
+        }
+
+        $this->debugLog('H2', 'Application::handleRoute', 'request_hydrated', [
+            'requestClass' => $requestClass,
+            'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),
+        ], 'initial');
+
+        return [$reqDto, null];
+    }
+
+    private function resolveResponseDto(array $route): object
+    {
+        $responseClass = $route['responseClass'] ?? null;
+        $resDto = ($responseClass && class_exists($responseClass)) ? new $responseClass() : null;
+
+        if ($resDto === null) {
+            $resDto = new \Semitexa\Core\Http\Response\GenericResponse();
+        }
+
+        // Apply AsResource defaults from resolved attributes
+        $resolvedResponse = AttributeDiscovery::getResolvedResponseAttributes(get_class($resDto));
+        if ($resolvedResponse) {
+            if (isset($resolvedResponse['handle']) && $resolvedResponse['handle'] && method_exists($resDto, 'setRenderHandle')) {
+                $resDto->setRenderHandle($resolvedResponse['handle']);
+            }
+            if (isset($resolvedResponse['context']) && method_exists($resDto, 'setRenderContext')) {
+                $resDto->setRenderContext($resolvedResponse['context']);
+            }
+            if (array_key_exists('format', $resolvedResponse) && method_exists($resDto, 'setRenderFormat')) {
+                $resDto->setRenderFormat($resolvedResponse['format']);
+            }
+            if (isset($resolvedResponse['renderer']) && method_exists($resDto, 'setRendererClass')) {
+                $resDto->setRendererClass($resolvedResponse['renderer']);
+            }
+        }
+
+        // Fallback: try to read attribute directly (3-level: class → attribute → parent attribute)
+        if (!method_exists($resDto, 'getRenderHandle') || !$resDto->getRenderHandle()) {
+            try {
+                $r = new \ReflectionClass($resDto);
+                $attrs = $r->getAttributes(\Semitexa\Core\Attributes\AsResource::class);
+                if (!empty($attrs)) {
+                    $a = $attrs[0]->newInstance();
+                    if (method_exists($resDto, 'setRenderHandle') && $a->handle) {
+                        $resDto->setRenderHandle($a->handle);
+                    }
+                    if (method_exists($resDto, 'setRenderContext') && isset($a->context)) {
+                        $resDto->setRenderContext($a->context);
+                    }
+                    if (method_exists($resDto, 'setRenderFormat') && $a->format) {
+                        $resDto->setRenderFormat($a->format);
+                    }
+                    if (method_exists($resDto, 'setRendererClass') && $a->renderer) {
+                        $resDto->setRendererClass($a->renderer);
+                    }
+                }
+                if (!method_exists($resDto, 'getRenderHandle') || !$resDto->getRenderHandle()) {
+                    $parent = $r->getParentClass();
+                    if ($parent) {
+                        $parentAttrs = $parent->getAttributes(\Semitexa\Core\Attributes\AsResource::class);
+                        if (!empty($parentAttrs)) {
+                            $parentAttr = $parentAttrs[0]->newInstance();
+                            if (method_exists($resDto, 'setRenderHandle') && $parentAttr->handle) {
+                                $resDto->setRenderHandle($parentAttr->handle);
+                            }
+                            if (method_exists($resDto, 'setRenderFormat') && $parentAttr->format) {
+                                $resDto->setRenderFormat($parentAttr->format);
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
+        return $resDto;
+    }
+
+    private function executeHandlers(array $handlerClasses, string $requestClass, object $reqDto, object $resDto): object
+    {
+        foreach ($handlerClasses as $handlerMeta) {
+            $handlerClass = is_array($handlerMeta) ? ($handlerMeta['class'] ?? null) : $handlerMeta;
+            if (!$handlerClass) {
+                continue;
+            }
+
+            $execution = $handlerMeta['execution'] ?? HandlerExecution::Sync->value;
+            if ($execution === HandlerExecution::Async->value) {
+                QueueDispatcher::enqueue(
+                    is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $requestClass],
+                    $reqDto,
+                    $resDto
+                );
+                continue;
+            }
+
+            if (!class_exists($handlerClass)) {
+                continue;
+            }
+
+            try {
+                $handlerStart = microtime(true);
+                $handler = $this->requestScopedContainer->get($handlerClass);
+            } catch (\Throwable $e) {
+                throw new \RuntimeException("Failed to resolve handler {$handlerClass}: " . $e->getMessage(), 0, $e);
+            }
+
+            if (method_exists($handler, 'handle')) {
+                $resDto = $handler->handle($reqDto, $resDto);
+                $this->debugLog('H2', 'Application::handleRoute', 'handler_completed', [
+                    'handler' => $handlerClass,
+                    'duration_ms' => round((microtime(true) - $handlerStart) * 1000, 2),
+                ], 'initial');
+            }
+        }
+
+        return $resDto;
+    }
+
+    private function renderResponse(object $resDto, ?object $reqDto): object
+    {
+        if (!method_exists($resDto, 'getRenderHandle')) {
+            return $resDto;
+        }
+
+        $handle = $resDto->getRenderHandle();
+        if (!$handle) {
+            return $resDto;
+        }
+
+        $renderStart = microtime(true);
+        $context = method_exists($resDto, 'getRenderContext') ? $resDto->getRenderContext() : [];
+        $format = method_exists($resDto, 'getRenderFormat') ? $resDto->getRenderFormat() : null;
+        if ($format === null) {
+            $format = \Semitexa\Core\Http\Response\ResponseFormat::Layout;
+        }
+        $rendererClass = method_exists($resDto, 'getRendererClass') ? $resDto->getRendererClass() : null;
+
+        if ($format === \Semitexa\Core\Http\Response\ResponseFormat::Json) {
+            $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if (method_exists($resDto, 'setContent')) {
+                $resDto->setContent($json ?: '');
+            }
+            if (method_exists($resDto, 'setHeader')) {
+                $resDto->setHeader('Content-Type', 'application/json');
+            }
+        } elseif ($format === \Semitexa\Core\Http\Response\ResponseFormat::Layout) {
+            $renderer = $rendererClass ?: 'Semitexa\\Frontend\\Layout\\LayoutRenderer';
+            if (!class_exists($renderer)) {
+                throw new \RuntimeException(
+                    'LayoutRenderer not found. For HTML pages install semitexa/core-frontend: composer require semitexa/core-frontend. Do not implement a custom Twig renderer in the project.'
+                );
+            }
+            if (!method_exists($renderer, 'renderHandle')) {
+                throw new \RuntimeException(
+                    'LayoutRenderer::renderHandle not found. Use semitexa/core-frontend for HTML rendering. Do not implement a custom renderer in the project.'
+                );
+            }
+            if (!isset($context['response'])) {
+                $context = ['response' => $context] + $context;
+            }
+            if (!isset($context['request']) && isset($reqDto)) {
+                $context['request'] = $reqDto;
+            }
+            if (method_exists($resDto, 'getLayoutFrame') && $resDto->getLayoutFrame() !== null) {
+                $context['layout_frame'] = $resDto->getLayoutFrame();
+            }
+            $html = $renderer::renderHandle($handle, $context);
+            if (method_exists($resDto, 'setContent')) {
+                $resDto->setContent($html);
+            }
+            if (method_exists($resDto, 'setHeader')) {
+                $resDto->setHeader('Content-Type', 'text/html; charset=utf-8');
+            }
+        }
+
+        $this->debugLog('H3', 'Application::handleRoute', 'render_completed', [
+            'handle' => $handle,
+            'format' => is_object($format) && property_exists($format, 'value') ? $format->value : $format,
+            'renderer' => $rendererClass ?: ($renderer ?? null),
+            'duration_ms' => round((microtime(true) - $renderStart) * 1000, 2),
+        ], 'initial');
+
+        return $resDto;
+    }
+
+    private function adaptResponse(object $resDto): Response
+    {
+        if ($resDto instanceof Response) {
+            return $resDto;
+        }
+        if (method_exists($resDto, 'toCoreResponse')) {
+            return $resDto->toCoreResponse();
+        }
+        return Response::json(['ok' => true]);
+    }
+
+    private function handleLegacyRoute(array $route): Response
+    {
+        $controller = new $route['class']();
+        $method = $route['method'];
+        return $method === '__invoke' ? $controller() : $controller->$method();
+    }
+
+    private function handleRouteException(\Throwable $e, array $route, Request $request): Response
+    {
+        if ($e instanceof \Semitexa\Core\Http\Exception\NotFoundException) {
+            $currentRouteName = $route['name'] ?? null;
+            if ($currentRouteName !== self::ROUTE_NAME_404) {
+                $route404 = AttributeDiscovery::findRouteByName(self::ROUTE_NAME_404);
+                if ($route404 !== null) {
+                    return $this->handleRoute($route404, $request);
+                }
+            }
+            return Response::notFound($e->getMessage() ?: 'The requested resource was not found');
+        }
+        try {
+            $this->container->get(LoggerInterface::class)->error($e->getMessage(), [
+                'exception' => get_debug_type($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+        } catch (\Throwable) {
+            // avoid failing error handling when logger is unavailable
+        }
+        return \Semitexa\Core\Http\ErrorRenderer::render($e, $request, $this->environment->appDebug);
     }
 
     /**

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core;
 
+use Semitexa\Core\Util\CodeGenHelper;
+use Semitexa\Core\Util\ProjectRoot;
 
 /**
  * Module Registry for managing different types of modules
@@ -175,7 +177,7 @@ class ModuleRegistry
      */
     private static function discoverModules(): void
     {
-        $projectRoot = self::getProjectRoot();
+        $projectRoot = ProjectRoot::get();
         
         // Discover local modules
         foreach (self::discoverLocalModules($projectRoot) as $module) {
@@ -463,28 +465,8 @@ class ModuleRegistry
 
     private static function buildNamespaceFromVendor(string $vendor, string $package): string
     {
-        return self::slugToStudly($vendor) . '\\' . self::slugToStudly($package);
+        return CodeGenHelper::slugToStudly($vendor) . '\\' . CodeGenHelper::slugToStudly($package);
     }
 
-    private static function slugToStudly(string $slug): string
-    {
-        $parts = preg_split('/[-_]/', $slug);
-        $parts = array_map(static fn ($p) => ucfirst(strtolower($p)), $parts);
-        return implode('', $parts);
-    }
     
-    /**
-     * Get project root directory (walk up until composer.json + src/modules found)
-     */
-    private static function getProjectRoot(): string
-    {
-        $dir = __DIR__;
-        while ($dir !== '/' && $dir !== '') {
-            if (file_exists($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
-                return $dir;
-            }
-            $dir = dirname($dir);
-        }
-        return dirname(__DIR__, 4);
-    }
 }

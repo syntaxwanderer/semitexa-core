@@ -7,7 +7,7 @@ namespace Semitexa\Core\Console\Command;
 use ReflectionClass;
 use Semitexa\Core\Attributes\AsPayload;
 use Semitexa\Core\Attributes\AsPayloadPart;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\Registry\RegistryPayloadGenerator;
 use Symfony\Component\Console\Command\Command;
@@ -36,7 +36,7 @@ class RegistrySyncPayloadsCommand extends BaseCommand
 
         $this->ensureRegistryDirs($root);
 
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         ModuleRegistry::initialize();
 
         $payloads = $this->collectPayloads();
@@ -94,7 +94,7 @@ class RegistrySyncPayloadsCommand extends BaseCommand
     private function collectPayloads(): array
     {
         $classes = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsPayload::class),
+            ClassDiscovery::findClassesWithAttribute(AsPayload::class),
             fn(string $class) => str_starts_with($class, 'Semitexa\\') && $this->isModuleActiveForClass($class)
         );
         $out = [];
@@ -121,7 +121,7 @@ class RegistrySyncPayloadsCommand extends BaseCommand
     private function collectPayloadParts(): array
     {
         $classes = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsPayloadPart::class),
+            ClassDiscovery::findClassesWithAttribute(AsPayloadPart::class),
             fn(string $class) => str_starts_with($class, 'Semitexa\\') && $this->isModuleActiveForClass($class)
         );
         $out = [];

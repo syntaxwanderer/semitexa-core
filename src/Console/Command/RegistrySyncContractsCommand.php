@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Console\Command;
 
 use Semitexa\Core\Container\ServiceContractRegistry;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\Registry\RegistryContractResolverGenerator;
 use Symfony\Component\Console\Command\Command;
@@ -31,7 +31,7 @@ class RegistrySyncContractsCommand extends BaseCommand
         $root = $this->getProjectRoot();
         $this->ensureRegistryDirs($root);
 
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         ModuleRegistry::initialize();
 
         $contractRegistry = new ServiceContractRegistry();

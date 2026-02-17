@@ -8,8 +8,10 @@ use Semitexa\Core\Attributes\AsPayload;
 use Semitexa\Core\Attributes\AsPayloadHandler;
 use Semitexa\Core\Attributes\AsResource;
 use Semitexa\Core\Config\EnvValueResolver;
+use Semitexa\Core\Environment;
 use Semitexa\Core\ModuleRegistry;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
+use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Core\Queue\HandlerExecution;
 use ReflectionClass;
 
@@ -46,13 +48,9 @@ class AttributeDiscovery
         
         $startTime = microtime(true);
         
-        // Initialize intelligent autoloader first
-        IntelligentAutoloader::initialize();
-        
-        // Preload module Request classes AFTER autoloader is initialized
-        // This ensures they're loaded and can be found
-        self::preloadModuleRequestClasses();
-        
+        // Initialize class discovery
+        ClassDiscovery::initialize();
+
         // Initialize module registry
         ModuleRegistry::initialize();
         
@@ -241,11 +239,8 @@ class AttributeDiscovery
         self::$resolvedResponseAttrs = [];
         self::$responseClassAliases = [];
 
-        // Preload module Handler classes to ensure they're in classMap
-        self::preloadModuleHandlerClasses();
-        
         // Single source of truth: only src/registry/Payloads. No route if class is not there.
-        $allPayloadClasses = IntelligentAutoloader::findClassesWithAttribute(AsPayload::class);
+        $allPayloadClasses = ClassDiscovery::findClassesWithAttribute(AsPayload::class);
         $httpRequestClasses = array_values(array_filter(
             $allPayloadClasses,
             fn ($class) => str_starts_with($class, 'App\\Registry\\Payloads\\')
@@ -284,7 +279,9 @@ class AttributeDiscovery
                 $groupKey = $meta['attr']['base'] ?? $className;
                 $requestGroups[$groupKey][] = $meta;
             } catch (\Throwable $e) {
-                // Silently skip on error
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] AttributeDiscovery payload reflection: " . $e->getMessage());
+                }
             }
         }
 
@@ -310,7 +307,9 @@ class AttributeDiscovery
                     'resolved' => $resolved,
                 ];
             } catch (\Throwable $e) {
-                // Skip invalid
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] AttributeDiscovery attribute resolution: " . $e->getMessage());
+                }
             }
         }
 
@@ -353,7 +352,7 @@ class AttributeDiscovery
 
         // Find handlers and map to requests (Semitexa packages + project App\ handlers)
         $httpHandlerClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsPayloadHandler::class),
+            ClassDiscovery::findClassesWithAttribute(AsPayloadHandler::class),
             fn ($class) => (str_starts_with($class, 'Semitexa\\') && self::isModuleActiveForClass($class))
                 || self::isProjectHandler($class)
         );
@@ -387,7 +386,9 @@ class AttributeDiscovery
                     self::$httpHandlers[$class->getName()] = $handlerMeta;
                 }
             } catch (\Throwable $e) {
-                // Silently skip on error
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] AttributeDiscovery handler reflection: " . $e->getMessage());
+                }
             }
         }
 
@@ -399,7 +400,7 @@ class AttributeDiscovery
             && class_exists('Semitexa\\Frontend\\Layout\\LayoutSlotRegistry')
         ) {
             $slotAttribute = 'Semitexa\\Frontend\\Attributes\\AsLayoutSlot';
-            $slotClasses = IntelligentAutoloader::findClassesWithAttribute($slotAttribute);
+            $slotClasses = ClassDiscovery::findClassesWithAttribute($slotAttribute);
             foreach ($slotClasses as $className) {
                 try {
                     $class = new \ReflectionClass($className);
@@ -421,7 +422,9 @@ class AttributeDiscovery
                         );
                     }
                 } catch (\Throwable $e) {
-                    // Silently skip on error
+                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                        error_log("[Semitexa] AttributeDiscovery layout slot: " . $e->getMessage());
+                    }
                 }
             }
         }
@@ -482,7 +485,7 @@ class AttributeDiscovery
     private static function processResponseAttributes(): void
     {
         // Single source of truth: only src/registry/Resources (same as Payloads from src/registry/Payloads)
-        $allResourceClasses = IntelligentAutoloader::findClassesWithAttribute(AsResource::class);
+        $allResourceClasses = ClassDiscovery::findClassesWithAttribute(AsResource::class);
         $responseClasses = array_values(array_filter(
             $allResourceClasses,
             fn ($class) => str_starts_with($class, 'App\\Registry\\Resources\\')
@@ -526,7 +529,9 @@ class AttributeDiscovery
                     self::$responseClassAliases[$parent->getName()] = $className;
                 }
             } catch (\Throwable $e) {
-                // Silently skip on error
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] AttributeDiscovery resource reflection: " . $e->getMessage());
+                }
             }
         }
 
@@ -687,7 +692,7 @@ class AttributeDiscovery
         }
 
         // Check if file is in project src/ directory (including src/modules/)
-        $projectRoot = self::getProjectRoot();
+        $projectRoot = ProjectRoot::get();
         $projectSrc = $projectRoot . '/src/';
 
         return str_starts_with($file, $projectSrc);
@@ -698,7 +703,10 @@ class AttributeDiscovery
         try {
             $file = (new ReflectionClass($className))->getFileName();
             return $file !== false && self::isProjectRequest($file);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                error_log("[Semitexa] AttributeDiscovery::isProjectHandler: " . $e->getMessage());
+            }
             return false;
         }
     }
@@ -721,7 +729,7 @@ class AttributeDiscovery
             $files = self::getAllPhpFiles($module['path']);
             
             // Legacy scanAllAttributes method is no longer used
-            // All discovery is done via IntelligentAutoloader in scanAttributesIntelligently()
+            // All discovery is done via ClassDiscovery in scanAttributesIntelligently()
         }
     }
     
@@ -791,130 +799,6 @@ class AttributeDiscovery
         return true; // Default to active if not recognized as part of a module
     }
     
-    /**
-     * Preload Request classes from src/modules to ensure they're available for discovery
-     */
-    private static function preloadModuleRequestClasses(): void
-    {
-        $projectRoot = self::getProjectRoot();
-        $modulesDir = $projectRoot . '/src/modules';
-        
-        if (!is_dir($modulesDir)) {
-            return;
-        }
-        
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($modulesDir)
-        );
-        
-        foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getExtension() === 'php') {
-                $content = file_get_contents($file->getPathname());
-                
-                // Check if file contains AsPayload attribute and Request in class name
-                if (strpos($content, 'AsPayload') !== false &&
-                    strpos($content, 'Request') !== false &&
-                    preg_match('/namespace\s+([^;]+);/', $content, $nsMatches) &&
-                    preg_match('/class\s+(\w+Request)/', $content, $classMatches)) {
-                    $fullClassName = $nsMatches[1] . '\\' . $classMatches[1];
-                    
-                    // Load class if not already loaded
-                    if (!class_exists($fullClassName)) {
-                        try {
-                            // Use IntelligentAutoloader's analyzeFile to add to classMap
-                            $reflection = new \ReflectionClass(\Semitexa\Core\IntelligentAutoloader::class);
-                            $analyzeMethod = $reflection->getMethod('analyzeFile');
-                            $analyzeMethod->setAccessible(true);
-                            $analyzeMethod->invoke(null, $file->getPathname());
-                            
-                            // Then require the file
-                            require_once $file->getPathname();
-                        } catch (\Throwable $e) {
-                            // Skip if can't load
-                        }
-                    }
-                }
-            }
-        }
-    }
     
-    /**
-     * Get project root directory
-     */
-    private static function getProjectRoot(): string
-    {
-        // Try common locations
-        $possibleRoots = [
-            '/var/www/html',
-            getcwd() ?: __DIR__,
-        ];
-        
-        foreach ($possibleRoots as $root) {
-            if (is_dir($root . '/src/modules') && is_file($root . '/composer.json')) {
-                return $root;
-            }
-        }
-        
-        // Fallback: walk up from current directory
-        $dir = __DIR__;
-        while ($dir !== '/' && $dir !== '') {
-            if (is_file($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
-                return $dir;
-            }
-            $parent = dirname($dir);
-            if ($parent === $dir) {
-                break;
-            }
-            $dir = $parent;
-        }
-        
-        return '/var/www/html';
-    }
     
-    /**
-     * Preload Handler classes from src/modules to ensure they're available for discovery
-     */
-    private static function preloadModuleHandlerClasses(): void
-    {
-        $projectRoot = self::getProjectRoot();
-        $modulesDir = $projectRoot . '/src/modules';
-        
-        if (!is_dir($modulesDir)) {
-            return;
-        }
-        
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($modulesDir)
-        );
-        
-        foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getExtension() === 'php') {
-                $content = file_get_contents($file->getPathname());
-                
-                // Check if file contains AsPayloadHandler attribute and Handler in class name
-                if (strpos($content, 'AsPayloadHandler') !== false &&
-                    strpos($content, 'Handler') !== false &&
-                    preg_match('/namespace\s+([^;]+);/', $content, $nsMatches) &&
-                    preg_match('/class\s+(\w+Handler)/', $content, $classMatches)) {
-                    $fullClassName = $nsMatches[1] . '\\' . $classMatches[1];
-                    
-                    // Load class if not already loaded
-                    if (!class_exists($fullClassName)) {
-                        try {
-                            // Use IntelligentAutoloader's analyzeFile to add to classMap
-                            $reflection = new \ReflectionClass(\Semitexa\Core\IntelligentAutoloader::class);
-                            $analyzeMethod = $reflection->getMethod('analyzeFile');
-                            $analyzeMethod->setAccessible(true);
-                            $analyzeMethod->invoke(null, $file->getPathname());
-                            
-                            // Then require the file
-                            require_once $file->getPathname();
-                        } catch (\Throwable $e) {
-                            // Skip if can't load
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

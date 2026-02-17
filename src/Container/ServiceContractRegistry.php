@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Core\Container;
 
 use Semitexa\Core\Attributes\AsServiceContract;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
+use Semitexa\Core\Environment;
 use Semitexa\Core\ModuleRegistry;
 
 /**
@@ -54,8 +55,8 @@ final class ServiceContractRegistry
 
     private function build(): void
     {
-        IntelligentAutoloader::initialize();
-        $candidates = IntelligentAutoloader::findClassesWithAttribute(AsServiceContract::class);
+        ClassDiscovery::initialize();
+        $candidates = ClassDiscovery::findClassesWithAttribute(AsServiceContract::class);
 
         /** @var array<string, array<int, array{module: string, impl: string}>> interface => list of {module, impl} */
         $byInterface = [];
@@ -89,6 +90,9 @@ final class ServiceContractRegistry
                 }
                 $byInterface[$interface][] = ['module' => $moduleName, 'impl' => $implClass];
             } catch (\Throwable $e) {
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] ServiceContractRegistry::build() failed for {$implClass}: " . $e->getMessage());
+                }
                 continue;
             }
         }

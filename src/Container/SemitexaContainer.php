@@ -7,9 +7,10 @@ namespace Semitexa\Core\Container;
 use Semitexa\Core\Attributes\InjectAsFactory;
 use Semitexa\Core\Attributes\InjectAsMutable;
 use Semitexa\Core\Attributes\InjectAsReadonly;
-use Semitexa\Core\IntelligentAutoloader;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Registry\RegistryContractResolverGenerator;
 use Semitexa\Core\Request;
+use Semitexa\Core\Environment;
 use Psr\Container\ContainerInterface;
 use ReflectionClass;
 use ReflectionNamedType;
@@ -104,7 +105,7 @@ final class SemitexaContainer implements ContainerInterface
      */
     public function build(): void
     {
-        IntelligentAutoloader::initialize();
+        ClassDiscovery::initialize();
         $registry = new ServiceContractRegistry();
         $contractDetails = $registry->getContractDetails();
 
@@ -166,8 +167,10 @@ final class SemitexaContainer implements ContainerInterface
                     $prop = (new \ReflectionClass($instance))->getProperty($propName);
                     $prop->setAccessible(true);
                     $prop->setValue($instance, $factory);
-                } catch (\Throwable) {
-                    // skip
+                } catch (\Throwable $e) {
+                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                        error_log("[Semitexa] SemitexaContainer::injectFactoriesIntoPrototypes failed for {$class}::\${$propName}: " . $e->getMessage());
+                    }
                 }
             }
         }
@@ -248,8 +251,10 @@ final class SemitexaContainer implements ContainerInterface
                     $out[$prop->getName()] = ['kind' => 'factory', 'type' => $typeName];
                 }
             }
-        } catch (\Throwable) {
-            // skip
+        } catch (\Throwable $e) {
+            if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                error_log("[Semitexa] SemitexaContainer::getInjectionsForClass({$class}) reflection failed: " . $e->getMessage());
+            }
         }
         return $out;
     }
@@ -476,7 +481,10 @@ final class SemitexaContainer implements ContainerInterface
         foreach ($injections as $propName => $info) {
             try {
                 $prop = $ref->getProperty($propName);
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] SemitexaContainer::injectPropertiesInto({$class}) property {$propName} not found: " . $e->getMessage());
+                }
                 continue;
             }
             $prop->setAccessible(true);
