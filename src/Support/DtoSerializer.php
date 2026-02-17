@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Semitexa\Core\Support;
 
 use ReflectionClass;
-use ReflectionProperty;
 
+/**
+ * Serialize Payload DTOs to/from array using getter/setter convention.
+ * toArray: calls get*() for each getter; key = camelCase name without "get".
+ * hydrate: for each key, calls set{CamelCase}($value) if method exists.
+ */
 class DtoSerializer
 {
     public static function toArray(object $dto): array
@@ -14,13 +18,12 @@ class DtoSerializer
         $reflection = new ReflectionClass($dto);
         $data = [];
 
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            if (!$property->isInitialized($dto)) {
-                continue;
+        foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+            $name = $method->getName();
+            if (str_starts_with($name, 'get') && strlen($name) > 3 && $method->getNumberOfRequiredParameters() === 0) {
+                $key = lcfirst(substr($name, 3));
+                $data[$key] = self::normalize($method->invoke($dto));
             }
-
-            $value = $property->getValue($dto);
-            $data[$property->getName()] = self::normalize($value);
         }
 
         return $data;
@@ -30,16 +33,34 @@ class DtoSerializer
     {
         $reflection = new ReflectionClass($dto);
 
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            $name = $property->getName();
-            if (!array_key_exists($name, $payload)) {
+        foreach ($payload as $key => $value) {
+            $setterName = 'set' . ucfirst(self::snakeToCamel($key));
+            if (!method_exists($dto, $setterName)) {
                 continue;
             }
 
-            $property->setValue($dto, $payload[$name]);
+            $method = $reflection->getMethod($setterName);
+            if ($method->getNumberOfRequiredParameters() !== 1) {
+                continue;
+            }
+
+            $method->invoke($dto, $value);
         }
 
         return $dto;
+    }
+
+    private static function snakeToCamel(string $key): string
+    {
+        $parts = explode('_', $key);
+        $first = array_shift($parts);
+        if ($first === null) {
+            return $key;
+        }
+        foreach ($parts as $i => $part) {
+            $parts[$i] = ucfirst($part);
+        }
+        return $first . implode('', $parts);
     }
 
     private static function normalize(mixed $value): mixed
@@ -53,4 +74,3 @@ class DtoSerializer
         };
     }
 }
-

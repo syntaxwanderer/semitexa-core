@@ -128,6 +128,15 @@ Place **all new routes** in a module (existing or new) under `src/modules/`, in 
 
 ---
 
+## Custom 404 page (error.404 route)
+
+If no route matches the request, or a handler throws `Semitexa\Core\Http\Exception\NotFoundException`, the system looks for a **named route** `error.404` (`Application::ROUTE_NAME_404`). If it exists, that route’s handlers are run (with the same request), so a module (e.g. **semitexa/core-frontend**) can render a custom 404 page.
+
+- **Register a Payload** with `name: 'error.404'` and path/methods as needed (e.g. path `'/404'`, methods `['GET']`), plus a Response class and handler that render your 404 view.
+- **Throw** `Semitexa\Core\Http\Exception\NotFoundException` in any handler when a resource is missing; the framework will then dispatch to the `error.404` route if registered, or return a plain 404 response.
+
+---
+
 ## Common mistakes / FAQ
 
 **Why don’t my Request/Handler in `src/Request/` or `src/Handler/` work (404)?**  

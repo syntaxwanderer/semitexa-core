@@ -126,6 +126,19 @@ class AttributeDiscovery
         
         return null;
     }
+
+    /**
+     * Find a route by its name (e.g. error.404 for custom 404 page).
+     */
+    public static function findRouteByName(string $name): ?array
+    {
+        foreach (self::$routes as $route) {
+            if (($route['name'] ?? null) === $name) {
+                return self::enrichRoute($route);
+            }
+        }
+        return null;
+    }
     
     /**
      * Enrich route with handlers and response class.

@@ -6,192 +6,136 @@ namespace Semitexa\Core\Http;
 
 use Semitexa\Core\Request;
 use ReflectionClass;
-use ReflectionProperty;
-use Semitexa\Core\Request\Attribute\PathParam;
+use ReflectionNamedType;
+use ReflectionUnionType;
 
 /**
- * Hydrates Request DTO objects from HTTP Request data
- * 
- * Automatically populates public properties of Request DTOs from:
- * - JSON body (if Content-Type is application/json)
- * - POST data (form-data, x-www-form-urlencoded)
- * - Query parameters
+ * Hydrates Request DTO from HTTP Request using setter convention.
+ *
+ * For each key in raw data (JSON/POST/query + path params), calls set{CamelCase}($value)
+ * if the method exists. Value is cast to the setter's parameter type before calling.
+ * Path params are keyed by route param name (e.g. 'id' -> setId($value)).
  */
 class RequestDtoHydrator
 {
-    /**
-     * Hydrate a Request DTO from HTTP Request
-     * 
-     * @param object $dto The Request DTO instance to hydrate
-     * @param Request $httpRequest The HTTP Request containing data
-     * @return object The hydrated DTO
-     */
     public static function hydrate(object $dto, Request $httpRequest): object
     {
-        $reflection = new ReflectionClass($dto);
-        
-        // Extract path parameters from route pattern
         $pathParams = self::extractPathParams($dto, $httpRequest);
-        
-        // Collect data from all sources
         $data = self::collectData($httpRequest);
-        
-        error_log("RequestDtoHydrator: Hydrating " . get_class($dto) . " with data keys: " . implode(', ', array_keys($data)));
-
-        // Merge path parameters (highest priority)
         $data = array_merge($data, $pathParams);
-        
-        // Hydrate each public property
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            $propertyName = $property->getName();
-            
-            // Get value from collected data
-            $value = $data[$propertyName] ?? null;
-            
-            // Check if property has PathParam attribute (required parameter)
-            $pathParamAttrs = $property->getAttributes(PathParam::class);
-            $isPathParam = !empty($pathParamAttrs);
-            
-            // Set value if available
-            if ($value !== null) {
-                // Get property type for type casting
-                $type = $property->getType();
-                $typedValue = self::castValue($value, $type);
-                
-                error_log("RequestDtoHydrator: Setting $propertyName = " . json_encode($typedValue));
 
-                // Set property value
-                $property->setValue($dto, $typedValue);
-            } elseif ($isPathParam && !$property->isInitialized($dto)) {
-                // Path parameter is required but not found - set empty string for string types
-                $type = $property->getType();
-                if ($type instanceof \ReflectionNamedType && $type->getName() === 'string') {
-                    $property->setValue($dto, '');
-                }
+        $reflection = new ReflectionClass($dto);
+
+        foreach ($data as $key => $value) {
+            $setterName = self::keyToSetterName($key);
+            if (!method_exists($dto, $setterName)) {
+                continue;
             }
+
+            $method = $reflection->getMethod($setterName);
+            if ($method->getNumberOfRequiredParameters() !== 1) {
+                continue;
+            }
+
+            $param = $method->getParameters()[0];
+            $type = $param->getType();
+            $typedValue = self::castValue($value, $type);
+            $method->invoke($dto, $typedValue);
         }
-        
+
         return $dto;
     }
-    
+
     /**
-     * Extract path parameters from URL based on route pattern
+     * Convert data key (snake_case or camelCase) to setter method name.
+     */
+    private static function keyToSetterName(string $key): string
+    {
+        $camel = self::snakeToCamel($key);
+        return 'set' . ucfirst($camel);
+    }
+
+    private static function snakeToCamel(string $key): string
+    {
+        $parts = explode('_', $key);
+        $first = array_shift($parts);
+        if ($first === null) {
+            return $key;
+        }
+        foreach ($parts as $i => $part) {
+            $parts[$i] = ucfirst($part);
+        }
+        return $first . implode('', $parts);
+    }
+
+    /**
+     * Extract path parameters from URL; keys are route param names (e.g. 'id').
      */
     private static function extractPathParams(object $dto, Request $httpRequest): array
     {
-        $params = [];
         $reflection = new ReflectionClass($dto);
-        
-        // Get route pattern from AsPayload attribute
         $requestAttrs = $reflection->getAttributes(\Semitexa\Core\Attributes\AsPayload::class);
         if (empty($requestAttrs)) {
-            return $params;
+            return [];
         }
-        
+
         try {
             $requestAttr = $requestAttrs[0]->newInstance();
             $routePattern = $requestAttr->path ?? null;
-        } catch (\Throwable $e) {
-            error_log("RequestDtoHydrator: Failed to get AsPayload attribute: " . $e->getMessage());
-            return $params;
+        } catch (\Throwable) {
+            return [];
         }
-        
-        // Handle resolved path (might be false if EnvValueResolver returned false for null)
-        if ($routePattern === null || $routePattern === false) {
-            return $params;
+
+        if ($routePattern === null || $routePattern === false || !is_string($routePattern) || $routePattern === '') {
+            return [];
         }
-        
-        // Ensure it's a string
-        if (!is_string($routePattern)) {
-            error_log("RequestDtoHydrator: routePattern is not a string: " . gettype($routePattern) . " = " . var_export($routePattern, true));
-            return $params;
+
+        if (strpos($routePattern, '{') === false) {
+            return [];
         }
-        
-        if (empty($routePattern)) {
-            return $params;
+
+        if (!preg_match_all('/\{([^}]+)\}/', $routePattern, $paramMatches)) {
+            return [];
         }
-        
-        $needle = '{';
-        if (!is_string($needle)) {
-            error_log("RequestDtoHydrator: needle is not a string: " . gettype($needle));
-            return $params;
-        }
-        if (strpos($routePattern, $needle) === false) {
-            return $params; // No path parameters
-        }
-        
-        // Extract all path parameters from route pattern
+
         $pathParams = [];
-        if (preg_match_all('/\{([^}]+)\}/', $routePattern, $paramMatches)) {
-            foreach ($paramMatches[1] as $index => $paramName) {
-                $pathParams[$paramName] = $index;
-            }
+        foreach ($paramMatches[1] as $index => $paramName) {
+            $pathParams[$paramName] = $index;
         }
-        
-        // Build regex pattern to match the route (use # as delimiter to avoid conflicts with /)
+
         $regexPattern = preg_quote($routePattern, '#');
         $regexPattern = preg_replace('#\\\{([^}]+)\\\}#', '([^/]+)', $regexPattern);
         $regexPattern = '#^' . $regexPattern . '$#';
-        
-        // Match actual path against pattern
-        if (preg_match($regexPattern, $httpRequest->getPath(), $matches)) {
-            // Map captured groups to parameter names
-            foreach ($pathParams as $paramName => $groupIndex) {
-                $captureIndex = $groupIndex + 1; // First match is full string
-                if (isset($matches[$captureIndex])) {
-                    $params[$paramName] = $matches[$captureIndex];
-                }
+
+        if (!preg_match($regexPattern, $httpRequest->getPath(), $matches)) {
+            return [];
+        }
+
+        $params = [];
+        foreach ($pathParams as $paramName => $groupIndex) {
+            $captureIndex = $groupIndex + 1;
+            if (isset($matches[$captureIndex])) {
+                $params[$paramName] = $matches[$captureIndex];
             }
         }
-        
-        // Map to property names using PathParam attributes
-        $mappedParams = [];
-        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
-            $pathParamAttrs = $property->getAttributes(PathParam::class);
-            if (empty($pathParamAttrs)) {
-                continue;
-            }
-            
-            $pathParamAttr = $pathParamAttrs[0]->newInstance();
-            $paramName = $pathParamAttr->name ?? $property->getName();
-            
-            if (isset($params[$paramName])) {
-                $mappedParams[$property->getName()] = $params[$paramName];
-            }
-        }
-        
-        return $mappedParams;
+
+        return $params;
     }
-    
-    /**
-     * Return raw request data (JSON/POST/query + path params) with same priority as hydrate.
-     * Used by PayloadValidator for strict type and constraint checks.
-     */
+
     public static function getRawData(Request $httpRequest, object $dto): array
     {
         return array_merge(self::collectData($httpRequest), self::extractPathParams($dto, $httpRequest));
     }
 
-    /**
-     * Collect data from HTTP Request (JSON body, POST, query)
-     * 
-     * Priority order:
-     * 1. JSON body (if Content-Type: application/json) - highest priority
-     * 2. POST data (form-urlencoded, multipart/form-data) - parsed by Swoole
-     * 3. Query parameters - lowest priority
-     */
     private static function collectData(Request $httpRequest): array
     {
         $data = [];
-        
-        // 1. Parse JSON body if Content-Type is application/json (highest priority)
-        // Swoole doesn't populate ->post for JSON requests, so we parse from raw content
+
         if ($httpRequest->isJson() && $httpRequest->getContent()) {
             $jsonData = $httpRequest->getJsonBody();
             if ($jsonData !== null) {
                 $data = array_merge($data, $jsonData);
             } else {
-                // Fallback: try to parse content directly if getJsonBody() failed
                 $content = $httpRequest->getContent();
                 $decoded = json_decode($content, true);
                 if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
@@ -199,60 +143,44 @@ class RequestDtoHydrator
                 }
             }
         } else {
-            // 2. Add POST data (form-urlencoded, multipart/form-data)
-            // Swoole automatically parses these into ->post array
             $data = array_merge($data, $httpRequest->post);
         }
-        
-        // 3. Add query parameters (lowest priority - only if not already set)
+
         foreach ($httpRequest->query as $key => $value) {
-            if (!isset($data[$key])) {
+            if (!array_key_exists($key, $data)) {
                 $data[$key] = $value;
             }
         }
-        
+
         return $data;
     }
-    
-    /**
-     * Cast value to appropriate type based on property type
-     */
+
     private static function castValue(mixed $value, ?\ReflectionType $type): mixed
     {
         if ($type === null) {
             return $value;
         }
-        
-        // Handle union types (e.g., int|string|null)
-        if ($type instanceof \ReflectionUnionType) {
-            $types = $type->getTypes();
-            // Try to cast to first non-null type
-            foreach ($types as $t) {
+
+        if ($type instanceof ReflectionUnionType) {
+            foreach ($type->getTypes() as $t) {
                 if ($t->getName() !== 'null') {
                     return self::castToType($value, $t->getName());
                 }
             }
             return $value;
         }
-        
-        // Handle nullable types (e.g., ?int)
-        if ($type instanceof \ReflectionNamedType) {
+
+        if ($type instanceof ReflectionNamedType) {
             $typeName = $type->getName();
-            
-            // Handle nullable
             if ($type->allowsNull() && ($value === null || $value === '')) {
                 return null;
             }
-            
             return self::castToType($value, $typeName);
         }
-        
+
         return $value;
     }
-    
-    /**
-     * Cast value to specific type
-     */
+
     private static function castToType(mixed $value, string $type): mixed
     {
         if ($value === null || $value === '') {
@@ -264,7 +192,7 @@ class RequestDtoHydrator
                 default => null,
             };
         }
-        
+
         return match ($type) {
             'int' => (int) $value,
             'float' => (float) $value,
@@ -274,22 +202,16 @@ class RequestDtoHydrator
             default => $value,
         };
     }
-    
-    /**
-     * Cast value to boolean
-     */
+
     private static function castToBool(mixed $value): bool
     {
         if (is_bool($value)) {
             return $value;
         }
-        
         if (is_string($value)) {
             $lower = strtolower($value);
             return in_array($lower, ['1', 'true', 'yes', 'on'], true);
         }
-        
         return (bool) $value;
     }
 }
-

@@ -22,6 +22,9 @@ use Semitexa\Core\Container\RequestScopedContainer;
  */
 class Application
 {
+    /** Route name for custom 404 page; if a payload with this name is registered, its handlers are invoked instead of the default not-found response. */
+    public const ROUTE_NAME_404 = 'error.404';
+
     private static function measure(string $label, callable $fn): mixed
     {
         if (class_exists(\Semitexa\Inspector\Profiler::class)) {
@@ -106,7 +109,7 @@ class Application
                     $response = $this->helloWorld($request);
                 }
             } else {
-                $response = $this->notFound($request);
+                $response = $this->getNotFoundResponse($request);
             }
         }
 
@@ -349,6 +352,16 @@ class Application
             $response = $method === '__invoke' ? $controller() : $controller->$method();
             return $response;
         } catch (\Throwable $e) {
+            if ($e instanceof \Semitexa\Core\Http\Exception\NotFoundException) {
+                $currentRouteName = $route['name'] ?? null;
+                if ($currentRouteName !== self::ROUTE_NAME_404) {
+                    $route404 = AttributeDiscovery::findRouteByName(self::ROUTE_NAME_404);
+                    if ($route404 !== null) {
+                        return $this->handleRoute($route404, $request);
+                    }
+                }
+                return Response::notFound($e->getMessage() ?: 'The requested resource was not found');
+            }
             try {
                 $this->container->get(LoggerInterface::class)->error($e->getMessage(), [
                     'exception' => get_debug_type($e),
@@ -361,6 +374,19 @@ class Application
             return \Semitexa\Core\Http\ErrorRenderer::render($e, $request);
         }
         });
+    }
+
+    /**
+     * Returns 404 response: if a route named error.404 is registered, dispatches to it;
+     * otherwise returns the default not-found response.
+     */
+    private function getNotFoundResponse(Request $request): Response
+    {
+        $route404 = AttributeDiscovery::findRouteByName(self::ROUTE_NAME_404);
+        if ($route404 !== null) {
+            return $this->handleRoute($route404, $request);
+        }
+        return $this->notFound($request);
     }
     
     private function helloWorld(Request $request): Response
