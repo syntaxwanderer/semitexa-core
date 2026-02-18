@@ -64,6 +64,14 @@ class Application extends SymfonyApplication
             $commands[] = new \Semitexa\Orm\Console\Command\BlockchainConsumeCommand();
         }
 
+        // Add Tenancy commands if available
+        if (class_exists(\Semitexa\Tenancy\CLI\TenantListCommand::class)) {
+            $commands[] = new \Semitexa\Tenancy\CLI\TenantListCommand();
+        }
+        if (class_exists(\Semitexa\Tenancy\CLI\TenantRunCommand::class)) {
+            $commands[] = new \Semitexa\Tenancy\CLI\TenantRunCommand();
+        }
+
         $this->addCommands($commands);
     }
 }

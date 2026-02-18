@@ -7,7 +7,6 @@ namespace Semitexa\Core\Container;
 use Semitexa\Core\Cookie\CookieJarInterface;
 use Semitexa\Core\Request;
 use Semitexa\Core\Session\SessionInterface;
-use Semitexa\Core\Tenancy\TenantContext;
 use Psr\Container\ContainerInterface;
 
 /**
@@ -19,7 +18,6 @@ class RequestScopedContainer
 {
     private ContainerInterface $container;
     private array $requestScopedCache = [];
-    private ?TenantContext $tenantContext = null;
 
     public function __construct(ContainerInterface $container)
     {
@@ -68,22 +66,11 @@ class RequestScopedContainer
         return $this->container->get($id);
     }
 
-    public function setTenantContext(TenantContext $tenantContext): void
-    {
-        $this->tenantContext = $tenantContext;
-    }
-
-    public function getTenantContext(): ?TenantContext
-    {
-        return $this->tenantContext;
-    }
-
     /**
-     * Reset request-scoped cache and tenant context (call after each request in Swoole).
+     * Reset request-scoped cache (call after each request in Swoole).
      */
     public function reset(): void
     {
         $this->requestScopedCache = [];
-        $this->tenantContext = null;
     }
 }

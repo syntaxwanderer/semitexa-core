@@ -13,10 +13,10 @@ use Semitexa\Core\Queue\QueueDispatcher;
 use Semitexa\Core\Session\Session;
 use Semitexa\Core\Session\SessionInterface;
 use Semitexa\Core\Session\SwooleTableSessionHandler;
-use Semitexa\Core\Tenancy\TenantResolver;
-use Semitexa\Core\Tenancy\TenantContext;
 use Psr\Container\ContainerInterface;
 use Semitexa\Core\Container\RequestScopedContainer;
+use Semitexa\Core\Event\EventDispatcherInterface;
+use Semitexa\Tenancy\TenancyBootstrapper;
 /**
  * Minimal Semitexa Application
  */
@@ -35,12 +35,22 @@ class Application
     private Environment $environment;
     private ContainerInterface $container;
     private RequestScopedContainer $requestScopedContainer;
-    
+    private ?TenancyBootstrapper $tenancy;
+
     public function __construct(?ContainerInterface $container = null)
     {
         $this->container = $container ?? \Semitexa\Core\Container\ContainerFactory::get();
         $this->requestScopedContainer = \Semitexa\Core\Container\ContainerFactory::getRequestScoped();
         $this->environment = $this->container->get(Environment::class);
+
+        // Initialize tenancy module (built once per worker, reads .env config)
+        $events = null;
+        try {
+            $events = $this->container->get(EventDispatcherInterface::class);
+        } catch (\Throwable) {
+            // EventDispatcher not registered — tenancy will work without events
+        }
+        $this->tenancy = new TenancyBootstrapper($events);
     }
     
     public function getContainer(): ContainerInterface
@@ -71,12 +81,13 @@ class Application
         // Clear superglobals for security (prevent accidental use of unvalidated data)
         \Semitexa\Core\Http\SecurityHelper::clearSuperglobals();
         
-        // Resolve tenant context (request-scoped, prevents data leakage)
-        $tenantResolver = new TenantResolver($this->environment);
-        $tenantContext = $tenantResolver->resolve($request);
-        
-        // Store tenant context in request-scoped container for access during request handling
-        $this->requestScopedContainer->setTenantContext($tenantContext);
+        // Resolve tenant context via tenancy module (coroutine-safe, event-driven)
+        if ($this->tenancy->isEnabled()) {
+            $tenantResponse = $this->tenancy->getHandler()->handle($request);
+            if ($tenantResponse !== null) {
+                return $tenantResponse; // Short-circuit: tenant not found or required
+            }
+        }
 
         // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
         $this->initSessionAndCookies($request);

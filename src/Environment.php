@@ -26,10 +26,6 @@ readonly class Environment
         public string $corsAllowMethods,
         public string $corsAllowHeaders,
         public bool $corsAllowCredentials,
-        // Tenancy configuration
-        public string $tenantStrategy,
-        public string $tenantHeader,
-        public string $tenantDefault
     ) {}
     
     public static function create(): self
@@ -62,9 +58,6 @@ readonly class Environment
             corsAllowMethods: $get('CORS_ALLOW_METHODS', 'GET, POST, PUT, DELETE, OPTIONS'),
             corsAllowHeaders: $get('CORS_ALLOW_HEADERS', 'Content-Type, Authorization'),
             corsAllowCredentials: (bool) $get('CORS_ALLOW_CREDENTIALS', '0'),
-            tenantStrategy: $get('TENANT_STRATEGY', 'header'),
-            tenantHeader: $get('TENANT_HEADER', 'X-Tenant-ID'),
-            tenantDefault: $get('TENANT_DEFAULT', 'default')
         );
     }
     
