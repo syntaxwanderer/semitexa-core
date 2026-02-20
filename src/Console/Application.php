@@ -48,20 +48,17 @@ class Application extends SymfonyApplication
         ];
 
         // Add ORM commands if available
-        if (class_exists(\Semitexa\Orm\Console\Command\EntityGenerateCommand::class)) {
-            $commands[] = new \Semitexa\Orm\Console\Command\EntityGenerateCommand();
+        if (class_exists(\Semitexa\Orm\Console\Command\OrmSyncCommand::class)) {
+            $commands[] = new \Semitexa\Orm\Console\Command\OrmSyncCommand();
         }
-        if (class_exists(\Semitexa\Orm\Console\Command\DomainGenerateCommand::class)) {
-            $commands[] = new \Semitexa\Orm\Console\Command\DomainGenerateCommand();
+        if (class_exists(\Semitexa\Orm\Console\Command\OrmDiffCommand::class)) {
+            $commands[] = new \Semitexa\Orm\Console\Command\OrmDiffCommand();
         }
-        if (class_exists(\Semitexa\Orm\Console\Command\MigrateCommand::class)) {
-            $commands[] = new \Semitexa\Orm\Console\Command\MigrateCommand();
+        if (class_exists(\Semitexa\Orm\Console\Command\OrmSeedCommand::class)) {
+            $commands[] = new \Semitexa\Orm\Console\Command\OrmSeedCommand();
         }
-        if (class_exists(\Semitexa\Orm\Console\Command\DatabaseBuildCommand::class)) {
-            $commands[] = new \Semitexa\Orm\Console\Command\DatabaseBuildCommand();
-        }
-        if (class_exists(\Semitexa\Orm\Console\Command\BlockchainConsumeCommand::class)) {
-            $commands[] = new \Semitexa\Orm\Console\Command\BlockchainConsumeCommand();
+        if (class_exists(\Semitexa\Orm\Console\Command\OrmStatusCommand::class)) {
+            $commands[] = new \Semitexa\Orm\Console\Command\OrmStatusCommand();
         }
 
         // Add Tenancy commands if available
