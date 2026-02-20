@@ -61,4 +61,14 @@ class ContainerFactory
         }
         return self::$requestScopedContainerInstance;
     }
+
+    /**
+     * Create a new RequestScopedContainer instance (not singleton).
+     * Use this in Swoole request handlers to ensure coroutine safety —
+     * each concurrent request gets its own request-scoped cache.
+     */
+    public static function createRequestScoped(): RequestScopedContainer
+    {
+        return new RequestScopedContainer(self::create());
+    }
 }

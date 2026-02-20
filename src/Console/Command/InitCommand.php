@@ -79,6 +79,7 @@ class InitCommand extends Command
             'var/cache',
             'var/log',
             'var/docs',
+            'var/run',
         ];
 
         foreach ($dirs as $path) {
@@ -93,7 +94,7 @@ class InitCommand extends Command
         }
 
         // Keep empty var subdirs in git
-        foreach (['var/cache', 'var/log', 'var/docs'] as $path) {
+        foreach (['var/cache', 'var/log', 'var/docs', 'var/run'] as $path) {
             $gitkeep = $root . '/' . $path . '/.gitkeep';
             if (!file_exists($gitkeep)) {
                 file_put_contents($gitkeep, '');

@@ -40,7 +40,7 @@ class Application
     public function __construct(?ContainerInterface $container = null)
     {
         $this->container = $container ?? \Semitexa\Core\Container\ContainerFactory::get();
-        $this->requestScopedContainer = \Semitexa\Core\Container\ContainerFactory::getRequestScoped();
+        $this->requestScopedContainer = \Semitexa\Core\Container\ContainerFactory::createRequestScoped();
         $this->environment = $this->container->get(Environment::class);
 
         // Initialize tenancy module (built once per worker, reads .env config)
