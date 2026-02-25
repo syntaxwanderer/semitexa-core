@@ -58,9 +58,15 @@ class RequestFactory
             $cookies = array_merge($parsed, $cookies);
         }
 
+        $server = $swooleRequest->server ?? [];
+        $uri = $server['request_uri'] ?? $server['REQUEST_URI'] ?? $server['path_info'] ?? '/';
+        if ($uri === '' || $uri === false) {
+            $uri = '/';
+        }
+
         \Semitexa\Core\Debug\SessionDebugLog::log('RequestFactory.fromSwoole', [
             'method' => $method,
-            'uri' => $swooleRequest->server['request_uri'] ?? '',
+            'uri' => $uri,
             'swoole_cookie_keys' => array_keys($swooleCookies),
             'has_cookie_header' => $cookieHeader !== null && $cookieHeader !== '',
             'cookie_header_len' => $cookieHeader !== null ? strlen($cookieHeader) : 0,
@@ -70,7 +76,7 @@ class RequestFactory
 
         return new Request(
             method: $method,
-            uri: $swooleRequest->server['request_uri'] ?? '/',
+            uri: $uri,
             headers: $swooleRequest->header ?? [],
             query: $swooleRequest->get ?? [],
             post: $post,

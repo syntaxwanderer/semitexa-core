@@ -17,6 +17,7 @@ class QueuedHandlerMessage implements \JsonSerializable
         public array $requestPayload,
         public array $responsePayload,
         public string $queuedAt = '',
+        public string $sessionId = '',
     ) {
         $this->queuedAt = $queuedAt ?: date(DATE_ATOM);
     }
@@ -31,6 +32,7 @@ class QueuedHandlerMessage implements \JsonSerializable
             'requestPayload' => $this->requestPayload,
             'responsePayload' => $this->responsePayload,
             'queuedAt' => $this->queuedAt,
+            'sessionId' => $this->sessionId,
         ];
     }
 
@@ -55,6 +57,7 @@ class QueuedHandlerMessage implements \JsonSerializable
             requestPayload: $data['requestPayload'] ?? [],
             responsePayload: $data['responsePayload'] ?? [],
             queuedAt: $data['queuedAt'] ?? date(DATE_ATOM),
+            sessionId: $data['sessionId'] ?? '',
         );
     }
 }

@@ -120,6 +120,16 @@ class Application
                     $response = $this->helloWorld($request);
                 }
             } else {
+                $path = $request->getPath();
+                if ($path === '/sse' && $request->getMethod() === 'GET') {
+                    $ctx = \Semitexa\Core\Server\SwooleBootstrap::getCurrentSwooleRequestResponse();
+                    if ($ctx !== null && count($ctx) >= 5 && $ctx[2] !== null && $ctx[3] !== null && $ctx[4] !== null && class_exists(\Semitexa\Ssr\Async\AsyncResourceSseServer::class)) {
+                        \Semitexa\Ssr\Async\AsyncResourceSseServer::setServer($ctx[2]);
+                        \Semitexa\Ssr\Async\AsyncResourceSseServer::setTables($ctx[3], $ctx[4]);
+                        \Semitexa\Ssr\Async\AsyncResourceSseServer::handle($ctx[0], $ctx[1]);
+                        return $this->finalizeSessionAndCookies($request, Response::alreadySent());
+                    }
+                }
                 $response = $this->getNotFoundResponse($request);
             }
         }
@@ -139,7 +149,7 @@ class Application
                     }
 
                     $resDto = $this->resolveResponseDto($route);
-                    $resDto = $this->executeHandlers($route['handlers'] ?? [], $route['class'], $reqDto, $resDto);
+                    $resDto = $this->executeHandlers($route['handlers'] ?? [], $route['class'], $reqDto, $resDto, $request);
                     $resDto = $this->renderResponse($resDto, $reqDto);
                     return $this->adaptResponse($resDto);
                 }
@@ -255,8 +265,10 @@ class Application
         return $resDto;
     }
 
-    private function executeHandlers(array $handlerClasses, string $requestClass, object $reqDto, object $resDto): object
+    private function executeHandlers(array $handlerClasses, string $requestClass, object $reqDto, object $resDto, Request $request): object
     {
+        $sessionId = $this->getSessionIdForAsyncDelivery($request);
+
         foreach ($handlerClasses as $handlerMeta) {
             $handlerClass = is_array($handlerMeta) ? ($handlerMeta['class'] ?? null) : $handlerMeta;
             if (!$handlerClass) {
@@ -268,7 +280,8 @@ class Application
                 QueueDispatcher::enqueue(
                     is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $requestClass],
                     $reqDto,
-                    $resDto
+                    $resDto,
+                    $sessionId
                 );
                 continue;
             }
@@ -363,6 +376,19 @@ class Application
         ], 'initial');
 
         return $resDto;
+    }
+
+    private function getSessionIdForAsyncDelivery(Request $request): string
+    {
+        $id = $request->getCookie('semitexa_sse_session', '');
+        if ($id !== '') {
+            return $id;
+        }
+        $id = $request->getCookie('PHPSESSID', '');
+        if ($id !== '') {
+            return $id;
+        }
+        return $request->getQuery('session_id', '');
     }
 
     private function dispatchHandlerCompletedEvent(string $handlerClass, object $resDto): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Queue;
 
+use Semitexa\Core\Contract\AsyncResultDeliveryInterface;
 use Semitexa\Core\Queue\Message\QueuedEventListenerMessage;
 use Semitexa\Core\Queue\Message\QueuedHandlerMessage;
 use Semitexa\Core\Support\DtoSerializer;
@@ -138,6 +139,7 @@ class QueueWorker
 
         try {
             $handler->handle($request, $response);
+            $this->deliverAsyncResult($message->sessionId, $response, $handlerClass);
             echo "✅ Async handler executed: {$handlerClass}\n";
             $this->updateStats('processed');
         } catch (\Throwable $e) {
@@ -145,7 +147,26 @@ class QueueWorker
             $this->updateStats('failed');
         }
     }
-    
+
+    private function deliverAsyncResult(string $sessionId, object $responseDto, string $handlerClass = ''): void
+    {
+        if ($sessionId === '') {
+            return;
+        }
+        try {
+            $container = ContainerFactory::get();
+            if (!$container->has(AsyncResultDeliveryInterface::class)) {
+                return;
+            }
+            $delivery = $container->get(AsyncResultDeliveryInterface::class);
+            if ($delivery instanceof AsyncResultDeliveryInterface) {
+                $delivery->deliver($sessionId, $responseDto, $handlerClass);
+            }
+        } catch (\Throwable) {
+            // Optional: no delivery implementation bound or delivery failed
+        }
+    }
+
     private function updateStats(string $type): void
     {
         $stats = json_decode(file_get_contents($this->statsFile), true) ?: [

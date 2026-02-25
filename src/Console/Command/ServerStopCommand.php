@@ -63,14 +63,19 @@ class ServerStopCommand extends BaseCommand
         }
 
         // 2. Stop by PID file (when server was started as php server.php and wrote PID)
-        $pidFile = $rootDir . '/var/swoole.pid';
-        if (file_exists($pidFile)) {
-            $pid = trim((string) file_get_contents($pidFile));
-            if ($pid !== '' && ctype_digit($pid)) {
-                $io->text("Stopping process from PID file: {$pid}");
-                $this->killPid((int) $pid);
+        $pidFiles = [
+            $rootDir . '/var/swoole.pid',
+            $rootDir . '/var/run/semitexa.pid',
+        ];
+        foreach ($pidFiles as $pidFile) {
+            if (file_exists($pidFile)) {
+                $pid = trim((string) file_get_contents($pidFile));
+                if ($pid !== '' && ctype_digit($pid)) {
+                    $io->text("Stopping process from PID file " . basename($pidFile) . ": {$pid}");
+                    $this->killPid((int) $pid);
+                }
+                @unlink($pidFile);
             }
-            @unlink($pidFile);
         }
 
         // 3. Kill any process still listening on the port (e.g. leftover or non-Docker run)

@@ -9,7 +9,7 @@ use Semitexa\Core\Support\DtoSerializer;
 
 class QueueDispatcher
 {
-    public static function enqueue(array $handlerMeta, object $requestDto, object $responseDto): void
+    public static function enqueue(array $handlerMeta, object $requestDto, object $responseDto, string $sessionId = ''): void
     {
         $transportName = $handlerMeta['transport'] ?? null;
         if (!$transportName) {
@@ -27,6 +27,7 @@ class QueueDispatcher
             responseClass: get_class($responseDto),
             requestPayload: DtoSerializer::toArray($requestDto),
             responsePayload: DtoSerializer::toArray($responseDto),
+            sessionId: $sessionId,
         );
 
         $transport = QueueTransportRegistry::create($transportName);

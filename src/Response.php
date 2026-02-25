@@ -14,8 +14,20 @@ readonly class Response implements ResourceInterface
     public function __construct(
         public string $content,
         public int $statusCode = 200,
-        public array $headers = []
+        public array $headers = [],
+        public bool $alreadySent = false,
     ) {}
+
+    /** Use when the response was already sent (e.g. SSE stream); bootstrap will not call end(). */
+    public static function alreadySent(): self
+    {
+        return new self('', 200, [], true);
+    }
+
+    public function isAlreadySent(): bool
+    {
+        return $this->alreadySent;
+    }
     
     public static function json(array $data, int $statusCode = 200): self
     {
@@ -89,7 +101,7 @@ readonly class Response implements ResourceInterface
                 $merged[$name] = $value;
             }
         }
-        return new self($this->content, $this->statusCode, $merged);
+        return new self($this->content, $this->statusCode, $merged, $this->alreadySent);
     }
     
     public function send(): void
