@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -15,6 +16,7 @@ use Symfony\Component\Console\Question\ConfirmationQuestion;
 use Semitexa\UserDomain\Domain\Entity\User;
 use Semitexa\UserDomain\Domain\Repository\UserRepositoryInterface;
 
+#[AsCommand(name: 'user:create', description: 'Create a new user')]
 class UserCreateCommand extends BaseCommand
 {
     protected function configure(): void

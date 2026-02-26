@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
-use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Input\InputArgument;
-use Symfony\Component\Console\Input\InputInterface;
-use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Style\SymfonyStyle;
+use Semitexa\Core\Attributes\AsCommand;
 use Semitexa\Core\Attributes\InjectAsFactory;
 use Semitexa\Core\Attributes\InjectAsMutable;
 use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Container\RequestScopedContainer;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
+#[AsCommand(name: 'test:handler', description: 'Test handler instantiation and property injection')]
 class TestHandlerCommand extends BaseCommand
 {
     protected function configure(): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -15,6 +16,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * docker-compose.yml, Dockerfile, AI_ENTRY.md, docs/AI_CONTEXT.md, README.md, var/docs (AI working dir only), phpunit.xml.dist, autoload in composer.json.
  * Framework docs (CONVENTIONS, RUNNING, ADDING_ROUTES) live in vendor/semitexa/core/docs/ — not written into project.
  */
+#[AsCommand(name: 'init', description: 'Create Semitexa project structure + AI_ENTRY, README, var/docs, phpunit.xml.dist')]
 class InitCommand extends Command
 {
     /** Default Swoole port (single source of truth for .env.example, docker-compose, docs). */

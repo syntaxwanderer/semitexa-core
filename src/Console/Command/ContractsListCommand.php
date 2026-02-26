@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Semitexa\Core\Container\ServiceContractRegistry;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -15,6 +16,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * List service contracts and which implementation is active per interface.
  * Helps developers and AI agents see contract → implementation binding and debug DI.
  */
+#[AsCommand(name: 'contracts:list', description: 'List service contracts (interfaces) and their active implementation. Use when debugging which class is bound to an interface.')]
 class ContractsListCommand extends BaseCommand
 {
     protected function configure(): void

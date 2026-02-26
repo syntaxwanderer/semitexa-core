@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+#[AsCommand(name: 'response:generate', description: 'Build/refresh registry resources (delegates to registry:sync:resources)')]
 class ResponseGenerateCommand extends BaseCommand
 {
     protected function configure(): void

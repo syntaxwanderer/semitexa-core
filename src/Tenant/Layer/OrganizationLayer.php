@@ -16,21 +16,3 @@ readonly class OrganizationLayer implements TenantLayerInterface
         return new OrganizationValue('default', 'Default Organization');
     }
 }
-
-readonly class OrganizationValue implements TenantLayerValueInterface
-{
-    public function __construct(
-        public string $id,
-        public ?string $name = null,
-    ) {}
-
-    public function layer(): TenantLayerInterface
-    {
-        return new OrganizationLayer();
-    }
-
-    public function rawValue(): string
-    {
-        return $this->id;
-    }
-}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Semitexa\Core\Container\ServiceContractRegistry;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * in src/registry/Contracts/. Single-implementation contracts are not generated
  * (container binds interface to that implementation directly).
  */
+#[AsCommand(name: 'registry:sync:contracts', description: 'Generate contract resolvers in src/registry/Contracts/ for interfaces with 2+ implementations.')]
 class RegistrySyncContractsCommand extends BaseCommand
 {
     protected function configure(): void

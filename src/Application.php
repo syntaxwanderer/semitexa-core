@@ -22,6 +22,8 @@ use Semitexa\Core\Auth\AuthContextInterface;
 use Semitexa\Core\Auth\GuestAuthContext;
 use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Locale\DefaultLocaleContext;
+use Semitexa\Tenancy\Context\CoroutineContextStore;
+use Semitexa\Tenancy\Context\TenantContext as TenancyTenantContext;
 use Semitexa\Tenancy\TenancyBootstrapper;
 /**
  * Minimal Semitexa Application
@@ -42,6 +44,10 @@ class Application
     private ContainerInterface $container;
     private RequestScopedContainer $requestScopedContainer;
     private ?TenancyBootstrapper $tenancy = null;
+    /** @var \Semitexa\Auth\AuthBootstrapper|null */
+    private $authBootstrapper = null;
+    /** @var \Semitexa\Locale\LocaleBootstrapper|null */
+    private $localeBootstrapper = null;
 
     public function __construct(?ContainerInterface $container = null)
     {
@@ -49,14 +55,21 @@ class Application
         $this->requestScopedContainer = \Semitexa\Core\Container\ContainerFactory::createRequestScoped();
         $this->environment = $this->container->get(Environment::class);
 
-        // Initialize tenancy module (built once per worker, reads .env config)
         $events = null;
         try {
             $events = $this->container->get(EventDispatcherInterface::class);
         } catch (\Throwable) {
-            // EventDispatcher not registered — tenancy will work without events
+            // EventDispatcher not registered
         }
+
         $this->tenancy = new TenancyBootstrapper($events);
+
+        if (class_exists(\Semitexa\Auth\AuthBootstrapper::class)) {
+            $this->authBootstrapper = new \Semitexa\Auth\AuthBootstrapper($events);
+        }
+        if (class_exists(\Semitexa\Locale\LocaleBootstrapper::class)) {
+            $this->localeBootstrapper = new \Semitexa\Locale\LocaleBootstrapper($events);
+        }
     }
     
     public function getContainer(): ContainerInterface
@@ -97,6 +110,9 @@ class Application
 
         // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
         $this->initSessionAndCookies($request);
+
+        // Locale resolution (Tenant → Locale order; locale can use request path/header)
+        $this->resolveLocaleAndUpdateContainer($request);
         
         // Initialize attribute discovery
         AttributeDiscovery::initialize();
@@ -150,6 +166,9 @@ class Application
                     if ($validationResponse) {
                         return $validationResponse;
                     }
+
+                    // AuthLevel: run auth handlers before business handlers (Tenant already resolved)
+                    $this->runAuthAndUpdateContainer($reqDto);
 
                     $resDto = $this->resolveResponseDto($route);
                     $handlers = $route['handlers'] ?? [];
@@ -603,12 +622,58 @@ class Application
     }
 
     /**
+     * Resolve locale from request and set LocaleContextInterface in container.
+     * Called after initSessionAndCookies so order is Tenant → Locale.
+     */
+    private function resolveLocaleAndUpdateContainer(Request $request): void
+    {
+        if ($this->localeBootstrapper === null || !$this->localeBootstrapper->isEnabled()) {
+            return;
+        }
+        $this->localeBootstrapper->resolve($request);
+        if (class_exists(\Semitexa\Locale\Context\LocaleManager::class)) {
+            $this->requestScopedContainer->set(LocaleContextInterface::class, \Semitexa\Locale\Context\LocaleManager::getInstance());
+        }
+    }
+
+    /**
+     * Run auth handlers with the request payload and set AuthContextInterface in container.
+     * Called after hydrateRequestDto so order is Tenant → Auth → Business handlers.
+     */
+    private function runAuthAndUpdateContainer(object $reqDto): void
+    {
+        if ($this->authBootstrapper === null || !$this->authBootstrapper->isEnabled()) {
+            return;
+        }
+        if (!$reqDto instanceof \Semitexa\Core\Contract\PayloadInterface) {
+            return;
+        }
+        $this->authBootstrapper->handle($reqDto);
+        if (class_exists(\Semitexa\Auth\Context\AuthManager::class)) {
+            $this->requestScopedContainer->set(AuthContextInterface::class, \Semitexa\Auth\Context\AuthManager::getInstance());
+        }
+    }
+
+    /**
      * Initialize request-scoped context interfaces (Tenant, Auth, Locale).
      * These are set into RequestScopedContainer for injection into handlers.
+     * When tenancy is enabled, resolved context from CoroutineContextStore is used
+     * and synced to TenantContext::set() so ORM and TenantContextInterface::get() see it.
      */
     private function initContextInterfaces(): void
     {
         $tenantContext = DefaultTenantContext::getInstance();
+        if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
+            $resolved = CoroutineContextStore::get();
+            if ($resolved !== null) {
+                $tenantContext = $resolved;
+                TenancyTenantContext::set($resolved);
+            } else {
+                TenancyTenantContext::clear();
+            }
+        } else {
+            TenancyTenantContext::clear();
+        }
         $this->requestScopedContainer->set(TenantContextInterface::class, $tenantContext);
 
         $authContext = GuestAuthContext::getInstance();

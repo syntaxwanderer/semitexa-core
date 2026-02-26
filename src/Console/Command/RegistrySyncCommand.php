@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputInterface;
@@ -15,6 +16,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * Convenience command: runs registry:sync:payloads, registry:sync:contracts, and (if available) registry:sync:entities.
  * Use this to sync all registry types with one call.
  */
+#[AsCommand(name: 'registry:sync', description: 'Run all registry sync commands (payloads, resources, contracts, and entities if available).')]
 class RegistrySyncCommand extends BaseCommand
 {
     protected function configure(): void

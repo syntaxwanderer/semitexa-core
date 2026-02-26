@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Console\Command;
 
 use ReflectionClass;
+use Semitexa\Core\Attributes\AsCommand;
 use Semitexa\Core\Attributes\AsResource;
 use Semitexa\Core\Attributes\AsResourcePart;
 use Semitexa\Core\Config\RegistryConfig;
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * When extra.semitexa.registry.use_manifest is true (default), reads/writes manifest.json.
  * When use_manifest is false, uses only discovery and does not write manifest.
  */
+#[AsCommand(name: 'registry:sync:resources', description: 'Discover Resources and ResourceParts, generate PHP classes in src/registry/Resources/.')]
 class RegistrySyncResourcesCommand extends BaseCommand
 {
     protected function configure(): void

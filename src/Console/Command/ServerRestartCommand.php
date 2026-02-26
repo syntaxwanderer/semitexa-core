@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
+use Semitexa\Core\Attributes\AsCommand;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -12,6 +13,7 @@ use Symfony\Component\Console\Command\Command;
 
 use Symfony\Component\Process\Process;
 
+#[AsCommand(name: 'server:restart', description: 'Restart Semitexa Environment (Docker)')]
 class ServerRestartCommand extends BaseCommand
 {
     protected function configure(): void

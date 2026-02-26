@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Console\Command;
 
 use ReflectionClass;
+use Semitexa\Core\Attributes\AsCommand;
 use Semitexa\Core\Attributes\AsPayload;
 use Semitexa\Core\Attributes\AsPayloadPart;
 use Semitexa\Core\Config\RegistryConfig;
@@ -22,6 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * When extra.semitexa.registry.use_manifest is true (default), reads/writes manifest.json.
  * When use_manifest is false (composer.json extra), uses only discovery and does not write manifest.
  */
+#[AsCommand(name: 'registry:sync:payloads', description: 'Discover Payloads and PayloadParts, generate PHP classes in src/registry/Payloads/.')]
 class RegistrySyncPayloadsCommand extends BaseCommand
 {
     protected function configure(): void
