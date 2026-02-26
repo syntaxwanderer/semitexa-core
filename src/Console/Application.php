@@ -70,6 +70,9 @@ class Application extends SymfonyApplication
                 $container->get(\Semitexa\Orm\OrmManager::class)
             );
         }
+        if (class_exists(\Semitexa\Orm\Console\Command\OrmDemoCommand::class)) {
+            $commands[] = new \Semitexa\Orm\Console\Command\OrmDemoCommand();
+        }
 
         // Add Tenancy commands if available
         if (class_exists(\Semitexa\Tenancy\CLI\TenantListCommand::class)) {

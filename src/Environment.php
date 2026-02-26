@@ -25,6 +25,11 @@ readonly class Environment
         public int $swooleMaxCoroutine,
         public string $swooleLogFile,
         public int $swooleLogLevel,
+        public int $swooleSessionTableSize,
+        public int $swooleSessionMaxBytes,
+        public int $swooleSseWorkerTableSize,
+        public int $swooleSseDeliverTableSize,
+        public int $swooleSsePayloadMaxBytes,
         public string $corsAllowOrigin,
         public string $corsAllowMethods,
         public string $corsAllowHeaders,
@@ -58,6 +63,11 @@ readonly class Environment
             swooleMaxCoroutine: (int) $get('SWOOLE_MAX_COROUTINE', '100000'),
             swooleLogFile: $get('SWOOLE_LOG_FILE', 'var/log/swoole.log'),
             swooleLogLevel: (int) $get('SWOOLE_LOG_LEVEL', '1'),
+            swooleSessionTableSize: (int) $get('SWOOLE_SESSION_TABLE_SIZE', '4096'),
+            swooleSessionMaxBytes: (int) $get('SWOOLE_SESSION_MAX_BYTES', '65535'),
+            swooleSseWorkerTableSize: (int) $get('SWOOLE_SSE_WORKER_TABLE_SIZE', '4096'),
+            swooleSseDeliverTableSize: (int) $get('SWOOLE_SSE_DELIVER_TABLE_SIZE', '8192'),
+            swooleSsePayloadMaxBytes: (int) $get('SWOOLE_SSE_PAYLOAD_MAX_BYTES', '65535'),
             corsAllowOrigin: $get('CORS_ALLOW_ORIGIN', '*'),
             corsAllowMethods: $get('CORS_ALLOW_METHODS', 'GET, POST, PUT, DELETE, OPTIONS'),
             corsAllowHeaders: $get('CORS_ALLOW_HEADERS', 'Content-Type, Authorization'),
@@ -125,6 +135,11 @@ readonly class Environment
             'SWOOLE_MAX_COROUTINE' => (string) $this->swooleMaxCoroutine,
             'SWOOLE_LOG_FILE' => $this->swooleLogFile,
             'SWOOLE_LOG_LEVEL' => (string) $this->swooleLogLevel,
+            'SWOOLE_SESSION_TABLE_SIZE' => (string) $this->swooleSessionTableSize,
+            'SWOOLE_SESSION_MAX_BYTES' => (string) $this->swooleSessionMaxBytes,
+            'SWOOLE_SSE_WORKER_TABLE_SIZE' => (string) $this->swooleSseWorkerTableSize,
+            'SWOOLE_SSE_DELIVER_TABLE_SIZE' => (string) $this->swooleSseDeliverTableSize,
+            'SWOOLE_SSE_PAYLOAD_MAX_BYTES' => (string) $this->swooleSsePayloadMaxBytes,
             'CORS_ALLOW_ORIGIN' => $this->corsAllowOrigin,
             'CORS_ALLOW_METHODS' => $this->corsAllowMethods,
             'CORS_ALLOW_HEADERS' => $this->corsAllowHeaders,
@@ -181,11 +196,15 @@ readonly class Environment
     /**
      * Load .env and .env.local into getenv() / $_ENV / $_SERVER.
      * Call from Swoole WorkerStart so workers have DB_*, etc. (fork may not inherit env in some setups).
+     * Variables already set in the process env (e.g. by Docker) are not overwritten, so compose overrides win.
      */
     public static function syncEnvFromFiles(): void
     {
         $env = self::loadEnv();
         foreach ($env as $key => $value) {
+            if (getenv($key) !== false) {
+                continue; // Preserve container/system env (e.g. DB_PORT=3306 in Docker)
+            }
             putenv("$key=$value");
             $_ENV[$key] = $value;
             $_SERVER[$key] = $value;

@@ -9,6 +9,8 @@ use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Environment;
 use Semitexa\Core\ErrorHandler;
 use Semitexa\Core\Request;
+use Semitexa\Core\Session\SwooleSessionTableHolder;
+use Swoole\Coroutine;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Http\Server;
@@ -16,12 +18,21 @@ use Swoole\Table;
 
 class SwooleBootstrap
 {
-    /** @var array{0: SwooleRequest, 1: SwooleResponse, 2: Server, 3: Table, 4: Table}|null */
-    private static ?array $currentSwooleContext = null;
+    private const COROUTINE_CONTEXT_KEY = '__semitexa_swoole_ctx';
 
+    /** Swoole Table: integer column size in bytes (32-bit). */
+    private const TABLE_COLUMN_INT_SIZE = 4;
+
+    /** Swoole Table: max string length for session_id column (session identifiers). */
+    private const TABLE_COLUMN_SESSION_ID_MAX_LENGTH = 128;
+
+    /** @return array{0: SwooleRequest, 1: SwooleResponse, 2: Server, 3: Table, 4: Table, 5: Table|null}|null */
     public static function getCurrentSwooleRequestResponse(): ?array
     {
-        return self::$currentSwooleContext;
+        if (Coroutine::getCid() < 0) {
+            return null;
+        }
+        return Coroutine::getContext()[self::COROUTINE_CONTEXT_KEY] ?? null;
     }
 
     public static function run(): void
@@ -37,19 +48,27 @@ class SwooleBootstrap
         $server = new Server($config->getHost(), $config->getPort());
         $server->set($config->getServerOptions());
 
-        $sessionWorkerTable = new Table(4096);
-        $sessionWorkerTable->column('worker_id', Table::TYPE_INT, 4);
+        // Session storage table (worker-shared, per-session data)
+        $sessionTable = new Table($env->swooleSessionTableSize);
+        $sessionTable->column('data', Table::TYPE_STRING, $env->swooleSessionMaxBytes);
+        $sessionTable->column('expires_at', Table::TYPE_INT, self::TABLE_COLUMN_INT_SIZE);
+        $sessionTable->create();
+        SwooleSessionTableHolder::setTable($sessionTable);
+
+        // SSE cross-worker routing table (session_id -> worker_id)
+        $sessionWorkerTable = new Table($env->swooleSseWorkerTableSize);
+        $sessionWorkerTable->column('worker_id', Table::TYPE_INT, self::TABLE_COLUMN_INT_SIZE);
         $sessionWorkerTable->create();
 
-        $deliverTable = new Table(8192);
-        $deliverTable->column('session_id', Table::TYPE_STRING, 128);
-        $deliverTable->column('worker_id', Table::TYPE_INT, 4);
-        $deliverTable->column('payload', Table::TYPE_STRING, 262144);
+        $deliverTable = new Table($env->swooleSseDeliverTableSize);
+        $deliverTable->column('session_id', Table::TYPE_STRING, self::TABLE_COLUMN_SESSION_ID_MAX_LENGTH);
+        $deliverTable->column('worker_id', Table::TYPE_INT, self::TABLE_COLUMN_INT_SIZE);
+        $deliverTable->column('payload', Table::TYPE_STRING, $env->swooleSsePayloadMaxBytes);
         $deliverTable->create();
 
-        $pendingDeliverTable = new Table(8192);
-        $pendingDeliverTable->column('session_id', Table::TYPE_STRING, 128);
-        $pendingDeliverTable->column('payload', Table::TYPE_STRING, 262144);
+        $pendingDeliverTable = new Table($env->swooleSseDeliverTableSize);
+        $pendingDeliverTable->column('session_id', Table::TYPE_STRING, self::TABLE_COLUMN_SESSION_ID_MAX_LENGTH);
+        $pendingDeliverTable->column('payload', Table::TYPE_STRING, $env->swooleSsePayloadMaxBytes);
         $pendingDeliverTable->create();
 
         $corsHandler = new CorsHandler($env);
@@ -89,7 +108,7 @@ class SwooleBootstrap
                 return;
             }
 
-            self::$currentSwooleContext = [$request, $response, $server, $sessionWorkerTable, $deliverTable, $pendingDeliverTable];
+            Coroutine::getContext()[self::COROUTINE_CONTEXT_KEY] = [$request, $response, $server, $sessionWorkerTable, $deliverTable, $pendingDeliverTable];
             $app = new Application();
 
             try {
@@ -106,7 +125,7 @@ class SwooleBootstrap
             } catch (\Throwable $e) {
                 self::handleError($e, $response, $app->getEnvironment());
             } finally {
-                self::$currentSwooleContext = null;
+                unset(Coroutine::getContext()[self::COROUTINE_CONTEXT_KEY]);
                 $app->getRequestScopedContainer()->reset();
             }
         });
