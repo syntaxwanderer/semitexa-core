@@ -65,7 +65,7 @@ class Application
         $this->tenancy = new TenancyBootstrapper($events);
 
         if (class_exists(\Semitexa\Auth\AuthBootstrapper::class)) {
-            $this->authBootstrapper = new \Semitexa\Auth\AuthBootstrapper($events);
+            $this->authBootstrapper = new \Semitexa\Auth\AuthBootstrapper($this->container, $events);
         }
         if (class_exists(\Semitexa\Locale\LocaleBootstrapper::class)) {
             $this->localeBootstrapper = new \Semitexa\Locale\LocaleBootstrapper($events);
