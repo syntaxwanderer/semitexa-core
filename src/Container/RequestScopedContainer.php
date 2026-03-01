@@ -19,7 +19,7 @@ use Psr\Container\ContainerInterface;
  * Application sets Session/Cookie/Request per request; then RequestContext is applied to the
  * Semitexa container so mutable services get them injected after clone.
  */
-class RequestScopedContainer
+class RequestScopedContainer implements ContainerInterface
 {
     private ContainerInterface $container;
     private array $requestScopedCache = [];
@@ -66,6 +66,21 @@ class RequestScopedContainer
         if ($localeContext instanceof LocaleContextInterface) {
             $this->container->setLocaleContext($localeContext);
         }
+    }
+
+    public function has(string $id): bool
+    {
+        if (isset($this->requestScopedCache[$id])) {
+            return true;
+        }
+        if (
+            $id === SessionInterface::class
+            || $id === CookieJarInterface::class
+            || $id === Request::class
+        ) {
+            return false;
+        }
+        return $this->container->has($id);
     }
 
     /**

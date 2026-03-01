@@ -31,8 +31,12 @@ readonly class Response implements ResourceInterface
     
     public static function json(array $data, int $statusCode = 200): self
     {
+        $encoded = json_encode(
+            $data,
+            \JSON_UNESCAPED_UNICODE | \JSON_INVALID_UTF8_SUBSTITUTE | \JSON_THROW_ON_ERROR
+        );
         return new self(
-            content: json_encode($data),
+            content: $encoded,
             statusCode: $statusCode,
             headers: ['Content-Type' => 'application/json']
         );

@@ -8,7 +8,7 @@ use Semitexa\Core\Session\Attribute\SessionSegment;
 use Semitexa\Core\Support\DtoSerializer;
 
 /**
- * Session implementation: in-memory bag + Swoole Table persistence.
+ * Session implementation: in-memory bag + backend persistence (Swoole Table or Redis).
  * Supports typed payloads via getPayload/setPayload (class must have #[SessionSegment('name')]).
  */
 final class Session implements SessionInterface
@@ -20,7 +20,7 @@ final class Session implements SessionInterface
 
     public function __construct(
         private string $id,
-        private SwooleTableSessionHandler $handler,
+        private SessionHandlerInterface $handler,
         private string $cookieName,
         private int $lifetimeSeconds = 3600,
     ) {
@@ -47,6 +47,12 @@ final class Session implements SessionInterface
     public function remove(string $key): void
     {
         unset($this->data[$key]);
+    }
+
+    /** Alias for remove() for compatibility with auth handlers. */
+    public function forget(string $key): void
+    {
+        $this->remove($key);
     }
 
     public function clear(): void
@@ -100,7 +106,7 @@ final class Session implements SessionInterface
         $data = $this->data;
         $data['__flash__'] = $this->flashNext;
 
-        if ($this->regenerate && SwooleSessionTableHolder::hasTable()) {
+        if ($this->regenerate) {
             $this->handler->destroy($this->id);
             $this->id = $this->generateId();
             $this->regenerate = false;

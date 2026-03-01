@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Semitexa\Core\Session;
 
 /**
- * Reads/writes session data to Swoole Table. Used by Session.
+ * Reads/writes session data to Swoole Table. Used by Session when Redis is not configured.
  */
-final class SwooleTableSessionHandler
+final class SwooleTableSessionHandler implements SessionHandlerInterface
 {
     private const COLUMN_DATA = 'data';
     private const COLUMN_EXPIRES = 'expires_at';
@@ -48,7 +48,10 @@ final class SwooleTableSessionHandler
         }
 
         $expires = $lifetimeSeconds > 0 ? time() + $lifetimeSeconds : 0;
-        $raw = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        $raw = json_encode(
+            $data,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
 
         $table->set($sessionId, [
             self::COLUMN_DATA => $raw,

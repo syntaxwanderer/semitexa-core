@@ -154,6 +154,13 @@ final class SemitexaContainer implements ContainerInterface
             $this->idToClass[$handlerClass] = $handlerClass;
         }
 
+        // Auth handlers (e.g. SessionAuthHandler) need request-scoped injection; register so they are mutable.
+        if (class_exists(\Semitexa\Auth\Attribute\AsAuthHandler::class)) {
+            foreach (\Semitexa\Core\Discovery\ClassDiscovery::findClassesWithAttribute(\Semitexa\Auth\Attribute\AsAuthHandler::class) as $handlerClass) {
+                $this->idToClass[$handlerClass] = $handlerClass;
+            }
+        }
+
         // Mark mutable classes (any injection of type T as InjectAsMutable)
         $this->collectMutableClasses();
 

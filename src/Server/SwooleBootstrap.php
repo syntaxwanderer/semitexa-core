@@ -100,6 +100,20 @@ class SwooleBootstrap
         });
 
         $server->on('request', function (SwooleRequest $request, SwooleResponse $response) use ($corsHandler, $healthHandler, $server, $sessionWorkerTable, $deliverTable, $pendingDeliverTable) {
+            $sent = false;
+            $ensureResponseSent = function () use ($response, &$sent): void {
+                if ($sent) {
+                    return;
+                }
+                try {
+                    @$response->status(500);
+                    @$response->header('Content-Type', 'text/plain');
+                    @$response->end('Internal Server Error');
+                    $sent = true;
+                } catch (\Throwable) {
+                }
+            };
+
             if ($healthHandler->handle($request, $response)) {
                 return;
             }
@@ -109,24 +123,43 @@ class SwooleBootstrap
             }
 
             Coroutine::getContext()[self::COROUTINE_CONTEXT_KEY] = [$request, $response, $server, $sessionWorkerTable, $deliverTable, $pendingDeliverTable];
-            $app = new Application();
+            $app = null;
 
             try {
+                $app = new Application();
                 $semitexaRequest = Request::create($request);
                 $semitexaResponse = $app->handleRequest($semitexaRequest);
 
                 $response->status($semitexaResponse->getStatusCode());
                 foreach ($semitexaResponse->getHeaders() as $name => $value) {
-                    $response->header($name, $value);
+                    if (is_array($value)) {
+                        foreach ($value as $line) {
+                            $response->header($name, (string) $line);
+                        }
+                    } else {
+                        $response->header($name, (string) $value);
+                    }
                 }
                 if (!$semitexaResponse->isAlreadySent()) {
                     $response->end($semitexaResponse->getContent());
                 }
+                $sent = true;
             } catch (\Throwable $e) {
-                self::handleError($e, $response, $app->getEnvironment());
+                try {
+                    $env = $app !== null ? $app->getEnvironment() : Environment::create();
+                    self::handleError($e, $response, $env);
+                    $sent = true;
+                } catch (\Throwable $inner) {
+                    $ensureResponseSent();
+                }
             } finally {
                 unset(Coroutine::getContext()[self::COROUTINE_CONTEXT_KEY]);
-                $app->getRequestScopedContainer()->reset();
+                if ($app !== null) {
+                    $app->getRequestScopedContainer()->reset();
+                }
+                if (!$sent) {
+                    $ensureResponseSent();
+                }
             }
         });
 

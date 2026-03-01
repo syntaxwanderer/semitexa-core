@@ -10,7 +10,9 @@ use Semitexa\Core\Discovery\AttributeDiscovery;
 use Semitexa\Core\Log\LoggerInterface;
 use Semitexa\Core\Queue\HandlerExecution;
 use Semitexa\Core\Queue\QueueDispatcher;
+use Semitexa\Core\Session\RedisSessionHandler;
 use Semitexa\Core\Session\Session;
+use Semitexa\Core\Session\SessionHandlerInterface;
 use Semitexa\Core\Session\SessionInterface;
 use Semitexa\Core\Session\SwooleTableSessionHandler;
 use Psr\Container\ContainerInterface;
@@ -65,7 +67,7 @@ class Application
         $this->tenancy = new TenancyBootstrapper($events);
 
         if (class_exists(\Semitexa\Auth\AuthBootstrapper::class)) {
-            $this->authBootstrapper = new \Semitexa\Auth\AuthBootstrapper($this->container, $events);
+            $this->authBootstrapper = new \Semitexa\Auth\AuthBootstrapper($this->container, $events, $this->requestScopedContainer);
         }
         if (class_exists(\Semitexa\Locale\LocaleBootstrapper::class)) {
             $this->localeBootstrapper = new \Semitexa\Locale\LocaleBootstrapper($events);
@@ -563,7 +565,8 @@ class Application
             $sessionId = bin2hex(random_bytes(16));
         }
         $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
-        $handler = new SwooleTableSessionHandler();
+        $handler = self::createSessionHandler();
+        $handlerType = $handler instanceof \Semitexa\Core\Session\RedisSessionHandler ? 'redis' : 'swoole_table';
         $session = new Session($sessionId, $handler, $cookieName, $sessionLifetime);
         $this->requestScopedContainer->set(SessionInterface::class, $session);
         $this->requestScopedContainer->set(CookieJarInterface::class, new CookieJar($request));
@@ -572,10 +575,23 @@ class Application
         $this->initContextInterfaces();
 
         \Semitexa\Core\Debug\SessionDebugLog::log('Application.initSessionAndCookies', [
+            'path' => $request->getPath(),
+            'method' => $request->getMethod(),
+            'handler' => $handlerType,
             'session_id_source' => $fromCookie ? 'from_cookie' : 'new',
             'session_id_preview' => substr($sessionId, 0, 8) . '…',
             'cookie_name' => $cookieName,
+            'has_auth_user_id' => $session->has('_auth_user_id'),
         ]);
+    }
+
+    private static function createSessionHandler(): SessionHandlerInterface
+    {
+        $redisHost = Environment::getEnvValue('REDIS_HOST');
+        if ($redisHost !== null && $redisHost !== '') {
+            return new RedisSessionHandler();
+        }
+        return new SwooleTableSessionHandler();
     }
 
     private function finalizeSessionAndCookies(Request $request, Response $response): Response
@@ -593,8 +609,11 @@ class Application
         $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
         $linesBeforeSession = $cookieJar->getSetCookieLines();
         \Semitexa\Core\Debug\SessionDebugLog::log('Application.finalizeSessionAndCookies.beforeAddSession', [
+            'path' => $request->getPath(),
+            'method' => $request->getMethod(),
+            'session_id_preview' => substr($session->getSessionIdForCookie(), 0, 8) . '…',
+            'has_auth_user_id' => $session->has('_auth_user_id'),
             'jar_line_count' => count($linesBeforeSession),
-            'jar_line_previews' => array_map(fn ($l) => substr($l, 0, 50) . '…', $linesBeforeSession),
         ]);
         $cookieJar->set($cookieName, $session->getSessionIdForCookie(), [
             'path' => '/',
@@ -614,6 +633,7 @@ class Application
             $cookieNamesFromLines[] = $eq !== false ? rawurldecode(trim(substr($line, 0, $eq))) : '?';
         }
         \Semitexa\Core\Debug\SessionDebugLog::log('Application.finalizeSessionAndCookies', [
+            'path' => $request->getPath(),
             'set_cookie_count' => count($lines),
             'set_cookie_names' => $cookieNamesFromLines,
             'session_id_preview' => substr($session->getSessionIdForCookie(), 0, 8) . '…',
@@ -642,6 +662,9 @@ class Application
      */
     private function runAuthAndUpdateContainer(object $reqDto): void
     {
+        if (class_exists(\Semitexa\Auth\Context\AuthManager::class)) {
+            $this->requestScopedContainer->set(AuthContextInterface::class, \Semitexa\Auth\Context\AuthManager::getInstance());
+        }
         if ($this->authBootstrapper === null || !$this->authBootstrapper->isEnabled()) {
             return;
         }
@@ -649,9 +672,6 @@ class Application
             return;
         }
         $this->authBootstrapper->handle($reqDto);
-        if (class_exists(\Semitexa\Auth\Context\AuthManager::class)) {
-            $this->requestScopedContainer->set(AuthContextInterface::class, \Semitexa\Auth\Context\AuthManager::getInstance());
-        }
     }
 
     /**

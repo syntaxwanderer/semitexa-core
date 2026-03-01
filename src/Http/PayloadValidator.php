@@ -8,17 +8,15 @@ use Semitexa\Core\Contract\ValidatablePayload;
 use Semitexa\Core\Request;
 
 /**
- * Validates a hydrated Payload DTO by calling its validate() method.
- * All Payload DTOs must implement ValidatablePayload.
+ * Validates a hydrated Payload DTO when it implements ValidatablePayload.
+ * Payloads that do not implement the interface are treated as valid (e.g. simple GET page payloads).
  */
 class PayloadValidator
 {
     public static function validate(object $dto, Request $httpRequest): PayloadValidationResult
     {
         if (!$dto instanceof ValidatablePayload) {
-            throw new \InvalidArgumentException(
-                'Payload DTO must implement ' . ValidatablePayload::class . ', got ' . get_class($dto)
-            );
+            return new PayloadValidationResult(true, []);
         }
 
         return $dto->validate();

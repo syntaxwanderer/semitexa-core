@@ -5,6 +5,7 @@ services:
   app:
     environment:
       DB_HOST: mysql
+      DB_PORT: "3306"
     depends_on:
       mysql:
         condition: service_healthy
