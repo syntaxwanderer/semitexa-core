@@ -169,15 +169,18 @@ class Application
                         return $validationResponse;
                     }
 
-                    // AuthLevel: run auth handlers before business handlers (Tenant already resolved)
-                    $this->runAuthAndUpdateContainer($reqDto);
-
                     $resDto = $this->resolveResponseDto($route);
-                    $handlers = $route['handlers'] ?? [];
-                    $class = $route['class'] ?? null;
-                    if ($class !== null) {
-                        $resDto = $this->executeHandlers($handlers, $class, $reqDto, $resDto, $request);
-                    }
+                    $context = new \Semitexa\Core\Pipeline\RequestPipelineContext(
+                        requestDto: $reqDto,
+                        route: $route,
+                        request: $request,
+                        resourceDto: $resDto,
+                        requestScopedContainer: $this->requestScopedContainer,
+                        authBootstrapper: $this->authBootstrapper,
+                    );
+                    $executor = new \Semitexa\Core\Pipeline\PipelineExecutor($this->requestScopedContainer, $this->container);
+                    $executor->execute($context);
+                    $resDto = $context->resourceDto;
                     $resDto = $this->renderResponse($resDto, $reqDto);
                     return $this->adaptResponse($resDto);
                 }
@@ -189,6 +192,10 @@ class Application
                 }
 
                 throw new \RuntimeException('Unknown route type: ' . ($route['type'] ?? 'undefined'));
+            } catch (\Semitexa\Core\Pipeline\Exception\AuthenticationRequiredException $e) {
+                return Response::json(['error' => 'Unauthorized', 'message' => $e->getMessage()], 401);
+            } catch (\Semitexa\Core\Pipeline\Exception\AccessDeniedException $e) {
+                return Response::json(['error' => 'Forbidden', 'message' => $e->getMessage()], 403);
             } catch (\Throwable $e) {
                 return $this->handleRouteException($e, $route, $request);
             }

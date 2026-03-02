@@ -122,6 +122,7 @@ class InitCommand extends Command
             'docker-compose.rabbitmq.yml' => $this->getDockerComposeRabbitMqContent(),
             'docker-compose.mysql.yml' => $this->getDockerComposeMysqlContent(),
             'docker-compose.redis.yml' => $this->getDockerComposeRedisContent(),
+            'docker-compose.dns.yml' => $this->getDockerComposeDnsContent(),
             'Dockerfile' => $this->getDockerfileContent(),
             'phpunit.xml.dist' => $this->getPhpunitXmlContent(),
         ];
@@ -196,6 +197,7 @@ class InitCommand extends Command
             'docker-compose.rabbitmq.yml' => $this->getDockerComposeRabbitMqContent(),
             'docker-compose.mysql.yml' => $this->getDockerComposeMysqlContent(),
             'docker-compose.redis.yml' => $this->getDockerComposeRedisContent(),
+            'docker-compose.dns.yml' => $this->getDockerComposeDnsContent(),
             'phpunit.xml.dist' => $this->getPhpunitXmlContent(),
             'bin/semitexa' => $this->getBinSemitexaContent(),
             '.gitignore' => $this->getGitignoreContent(),
@@ -230,7 +232,7 @@ class InitCommand extends Command
             $io->note('Skipped (exists): ' . $f . ' (use --force to overwrite)');
         }
 
-        $io->success('Docs and scaffold (AI_ENTRY, docs/AI_CONTEXT, README, server.php, .env.example, Dockerfile, docker-compose (+ mysql, redis, rabbitmq overlays), phpunit, bin/semitexa, .gitignore) synced from framework.');
+        $io->success('Docs and scaffold (AI_ENTRY, docs/AI_CONTEXT, README, server.php, .env.example, Dockerfile, docker-compose (+ mysql, redis, rabbitmq, dns overlays), phpunit, bin/semitexa, .gitignore) synced from framework.');
         $io->text('.env is never touched. Copy new vars from .env.example to .env if needed.');
         return Command::SUCCESS;
     }
@@ -304,6 +306,7 @@ class InitCommand extends Command
         return $this->readTemplate('bin-semitexa');
     }
 
+
     private function getGitignoreContent(): string
     {
         return $this->readTemplate('gitignore');
@@ -361,6 +364,59 @@ class InitCommand extends Command
             . "    ports:\n      - \"\${REDIS_PORT:-6379}:6379\"\n    volumes:\n      - redis_data:/data\n"
             . "    healthcheck:\n      test: [\"CMD\", \"redis-cli\", \"ping\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n      start_period: 10s\n"
             . "\nvolumes:\n  redis_data:\n";
+    }
+
+    private function getDockerComposeDnsContent(): string
+    {
+        $dir = $this->getInitResourcesDir();
+        $path = $dir !== '' ? $dir . '/docker-compose.dns.yml' : '';
+        if ($path !== '' && is_readable($path)) {
+            $content = file_get_contents($path);
+            return $content !== false ? $content : '';
+        }
+        return "# Semitexa Local DNS & Nginx Proxy\n"
+            . "# DNS: lightweight dnsmasq for local domains.\n"
+            . "# Reverse Proxy: Nginx catching port 80 and proxying to the Swoole container.\n"
+            . "services:\n"
+            . "  dns:\n"
+            . "    image: alpine:3.21\n"
+            . "    restart: unless-stopped\n"
+            . "    command: [\"sh\", \"-c\", \"apk add --no-cache dnsmasq && dnsmasq --keep-in-foreground --conf-file=/etc/dnsmasq.d/dnsmasq.conf\"]\n"
+            . "    ports:\n"
+            . "      - \"127.0.0.1:5553:53/udp\"\n"
+            . "      - \"127.0.0.1:5553:53/tcp\"\n"
+            . "    volumes:\n"
+            . "      - ./var/dns/dnsmasq.conf:/etc/dnsmasq.d/dnsmasq.conf:ro\n"
+            . "      - ./var/dns/domains.conf:/etc/dnsmasq.d/domains.conf:ro\n"
+            . "    cap_add:\n"
+            . "      - NET_ADMIN\n"
+            . "    healthcheck:\n"
+            . "      test: [\"CMD\", \"nslookup\", \"localhost\", \"127.0.0.1\"]\n"
+            . "      interval: 10s\n"
+            . "      timeout: 3s\n"
+            . "      retries: 3\n"
+            . "      start_period: 5s\n"
+            . "\n"
+            . "  proxy:\n"
+            . "    image: nginx:alpine\n"
+            . "    restart: unless-stopped\n"
+            . "    ports:\n"
+            . "      - \"80:80\"\n"
+            . "    command: >\n"
+            . "      sh -c '\n"
+            . "      echo \"server {\n"
+            . "        listen 80 default_server;\n"
+            . "        server_name _;\n"
+            . "        location / {\n"
+            . "          proxy_pass http://app:\${SWOOLE_PORT:-9502};\n"
+            . "          proxy_set_header Host \$\$host;\n"
+            . "          proxy_set_header X-Real-IP \$\$remote_addr;\n"
+            . "          proxy_set_header X-Forwarded-For \$\$proxy_add_x_forwarded_for;\n"
+            . "          proxy_set_header X-Forwarded-Proto \$\$scheme;\n"
+            . "        }\n"
+            . "      }\" > /etc/nginx/conf.d/default.conf && nginx -g \"daemon off;\"'\n"
+            . "    depends_on:\n"
+            . "      - app\n";
     }
 
     private function getDockerComposeContent(): string
