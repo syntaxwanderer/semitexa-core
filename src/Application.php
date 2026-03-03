@@ -8,8 +8,6 @@ use Semitexa\Core\Cookie\CookieJar;
 use Semitexa\Core\Cookie\CookieJarInterface;
 use Semitexa\Core\Discovery\AttributeDiscovery;
 use Semitexa\Core\Log\LoggerInterface;
-use Semitexa\Core\Queue\HandlerExecution;
-use Semitexa\Core\Queue\QueueDispatcher;
 use Semitexa\Core\Session\RedisSessionHandler;
 use Semitexa\Core\Session\Session;
 use Semitexa\Core\Session\SessionHandlerInterface;
@@ -175,7 +173,6 @@ class Application
                         route: $route,
                         request: $request,
                         resourceDto: $resDto,
-                        requestScopedContainer: $this->requestScopedContainer,
                         authBootstrapper: $this->authBootstrapper,
                     );
                     $executor = new \Semitexa\Core\Pipeline\PipelineExecutor($this->requestScopedContainer, $this->container);
@@ -313,55 +310,6 @@ class Application
         return $resDto;
     }
 
-    /**
-     * @param list<array{class?: string, execution?: string}|string> $handlerClasses
-     */
-    private function executeHandlers(array $handlerClasses, string $requestClass, object $reqDto, object $resDto, Request $request): object
-    {
-        $sessionId = $this->getSessionIdForAsyncDelivery($request);
-
-        foreach ($handlerClasses as $handlerMeta) {
-            $handlerClass = is_array($handlerMeta) ? ($handlerMeta['class'] ?? null) : $handlerMeta;
-            if (!$handlerClass) {
-                continue;
-            }
-
-            $execution = $handlerMeta['execution'] ?? HandlerExecution::Sync->value;
-            if ($execution === HandlerExecution::Async->value) {
-                QueueDispatcher::enqueue(
-                    is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $requestClass],
-                    $reqDto,
-                    $resDto,
-                    $sessionId
-                );
-                continue;
-            }
-
-            if (!class_exists($handlerClass)) {
-                continue;
-            }
-
-            try {
-                $handlerStart = microtime(true);
-                $handler = $this->requestScopedContainer->get($handlerClass);
-            } catch (\Throwable $e) {
-                throw new \RuntimeException("Failed to resolve handler {$handlerClass}: " . $e->getMessage(), 0, $e);
-            }
-
-            if (method_exists($handler, 'handle') && is_object($handler)) {
-                $resDto = $handler->handle($reqDto, $resDto);
-                $this->debugLog('H2', 'Application::handleRoute', 'handler_completed', [
-                    'handler' => $handlerClass,
-                    'duration_ms' => round((microtime(true) - $handlerStart) * 1000, 2),
-                ], 'initial');
-
-                $this->dispatchHandlerCompletedEvent($handlerClass, $resDto);
-            }
-        }
-
-        return $resDto;
-    }
-
     private function renderResponse(object $resDto, ?object $reqDto): object
     {
         if (!method_exists($resDto, 'getRenderHandle')) {
@@ -427,46 +375,6 @@ class Application
         ], 'initial');
 
         return $resDto;
-    }
-
-    private function getSessionIdForAsyncDelivery(Request $request): string
-    {
-        $id = $request->getCookie('semitexa_sse_session', '');
-        if ($id !== '') {
-            return $id;
-        }
-        $id = $request->getCookie('PHPSESSID', '');
-        if ($id !== '') {
-            return $id;
-        }
-        return $request->getQuery('session_id', '');
-    }
-
-    private function dispatchHandlerCompletedEvent(string $handlerClass, object $resDto): void
-    {
-        try {
-            $events = $this->container->get(EventDispatcherInterface::class);
-        } catch (\Throwable) {
-            return;
-        }
-
-        if (!$events instanceof EventDispatcherInterface) {
-            return;
-        }
-
-        $handle = method_exists($resDto, 'getRenderHandle') ? $resDto->getRenderHandle() : null;
-        
-        if (!$handle) {
-            return;
-        }
-
-        $event = new \Semitexa\Core\Events\HandlerCompleted(
-            $handlerClass,
-            $resDto,
-            $handle
-        );
-
-        $events->dispatch($event);
     }
 
     private function adaptResponse(object $resDto): Response
@@ -661,24 +569,6 @@ class Application
         if (class_exists(\Semitexa\Locale\Context\LocaleManager::class)) {
             $this->requestScopedContainer->set(LocaleContextInterface::class, \Semitexa\Locale\Context\LocaleManager::getInstance());
         }
-    }
-
-    /**
-     * Run auth handlers with the request payload and set AuthContextInterface in container.
-     * Called after hydrateRequestDto so order is Tenant → Auth → Business handlers.
-     */
-    private function runAuthAndUpdateContainer(object $reqDto): void
-    {
-        if (class_exists(\Semitexa\Auth\Context\AuthManager::class)) {
-            $this->requestScopedContainer->set(AuthContextInterface::class, \Semitexa\Auth\Context\AuthManager::getInstance());
-        }
-        if ($this->authBootstrapper === null || !$this->authBootstrapper->isEnabled()) {
-            return;
-        }
-        if (!$reqDto instanceof \Semitexa\Core\Contract\PayloadInterface) {
-            return;
-        }
-        $this->authBootstrapper->handle($reqDto);
     }
 
     /**

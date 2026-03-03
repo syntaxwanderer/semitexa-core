@@ -89,7 +89,9 @@ final class EventListenerRegistry
 
     private static function isProjectEventListeners(string $class): bool
     {
-        return str_starts_with($class, 'App\\') && str_contains($class, 'Handler\\Event\\');
+        return str_starts_with($class, 'App\\') && (
+            str_contains($class, 'Event\\DomainListener\\')
+        );
     }
 
     /** Execution from listener attribute; default Sync when not set */

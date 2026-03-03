@@ -1,6 +1,6 @@
-# Module structure: Payloads and Handlers
+# Module structure: Payloads and Event Handlers
 
-All DTOs (payloads) and handlers in a Semitexa module use a **single Payload folder with subfolders by type**, like Handlers.
+All DTOs (payloads) and event-driven handlers in a Semitexa module use a **single Payload folder with subfolders by type**.
 
 ---
 
@@ -16,14 +16,17 @@ All DTOs (payloads) and handlers in a Semitexa module use a **single Payload fol
 
 Do **not** put these in `Application/Session/` or `Application/Event/` at module root — use **`Application/Payload/Request/`**, **`Payload/Session/`**, **`Payload/Event/`** only.
 
+Request DTOs can declare pipeline requirements: `#[RequiresAuth]`, `#[RequiresAbility('ability')]`.
+
 ---
 
-## Handlers: `Application/Handler/{Type}/`
+## Event: `Application/Event/{Type}/`
 
-| Subfolder | Purpose |
-|-----------|---------|
-| **Request** | HTTP handlers: `#[AsPayloadHandler(payload: ..., resource: ...)]` |
-| **Event** | Event listeners: `#[AsEventListener(event: ..., execution: ...)]` |
+| Subfolder | Purpose | Attribute |
+|-----------|---------|-----------|
+| **PayloadHandler** | HTTP handlers (payload → resource) | `#[AsPayloadHandler(payload: ..., resource: ...)]` |
+| **System** | Pipeline listeners (Auth/Access phases) | `#[AsPipelineListener(phase: ..., priority: ...)]` |
+| **DomainListener** | Domain event listeners (sync/async/queued) | `#[AsEventListener(event: ..., execution: ...)]` |
 
 ---
 
@@ -32,17 +35,18 @@ Do **not** put these in `Application/Session/` or `Application/Event/` at module
 ```
 Application/
 ├── Payload/
-│   ├── Request/   # HTTP request DTOs
-│   ├── Session/   # Session segment DTOs
-│   └── Event/     # Event DTOs
-├── Resource/      # Response DTOs
-├── Handler/
-│   ├── Request/   # HTTP handlers
-│   └── Event/     # Event listeners
+│   ├── Request/          # HTTP request DTOs
+│   ├── Session/          # Session segment DTOs
+│   └── Event/            # Event DTOs
+├── Event/
+│   ├── PayloadHandler/   # HTTP handlers
+│   ├── System/           # Pipeline listeners
+│   └── DomainListener/   # Domain event listeners
+├── Resource/             # Response DTOs
 ├── View/templates/
-└── Service/       # optional
+└── Service/              # optional
 ```
 
 ---
 
-See **ADDING_ROUTES.md** for adding new routes; project **docs/MODULE_STRUCTURE.md** may contain the same layout and more detail.
+See **ADDING_ROUTES.md** for adding new routes; project **docs/MODULE_STRUCTURE.md** for the full layout with pipeline docs.

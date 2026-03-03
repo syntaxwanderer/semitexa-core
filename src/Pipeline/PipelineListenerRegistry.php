@@ -81,8 +81,6 @@ final class PipelineListenerRegistry
         return str_starts_with($class, 'App\\') && (
             str_contains($class, 'Event\\System\\')
             || str_contains($class, 'Event\\PayloadHandler\\')
-            || str_contains($class, 'Handler\\Request\\')
-            || str_contains($class, 'Handler\\Event\\')
         );
     }
 }

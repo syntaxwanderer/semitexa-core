@@ -5,11 +5,18 @@ declare(strict_types=1);
 namespace Semitexa\Core\Pipeline;
 
 use Psr\Container\ContainerInterface;
+use Semitexa\Core\Contract\HandlerInterface;
 use Semitexa\Core\Event\EventDispatcherInterface;
 use Semitexa\Core\Events\HandlerCompleted;
 use Semitexa\Core\Queue\HandlerExecution;
 use Semitexa\Core\Queue\QueueDispatcher;
 
+/**
+ * Executes the request pipeline: a fixed sequence of phases (Auth → Access → Handle).
+ *
+ * Pipeline listeners are always synchronous — the response depends on their result.
+ * Domain events (HandlerCompleted) are dispatched after the pipeline completes.
+ */
 final class PipelineExecutor
 {
     public function __construct(
@@ -19,9 +26,9 @@ final class PipelineExecutor
     }
 
     /**
-     * @return list<string>
+     * @return list<class-string>
      */
-    public function getPhases(): array
+    protected function getPhases(): array
     {
         return [AuthCheck::class, AccessCheck::class, HandleRequest::class];
     }
@@ -40,11 +47,27 @@ final class PipelineExecutor
         $listeners = PipelineListenerRegistry::getListeners($phaseClass);
         foreach ($listeners as $meta) {
             $instance = $this->requestScopedContainer->get($meta['class']);
-            $instance->handle($context);
+            $this->invokeListener($instance, $context);
         }
 
         if ($phaseClass === HandleRequest::class) {
             $this->executeRouteHandlers($context);
+        }
+    }
+
+    /**
+     * Bridge: HandlerInterface instances keep their contract (handle($req, $res): $res);
+     * PipelineListenerInterface instances receive the full context.
+     */
+    private function invokeListener(object $instance, RequestPipelineContext $context): void
+    {
+        if ($instance instanceof HandlerInterface) {
+            $context->resourceDto = $instance->handle(
+                $context->requestDto,
+                $context->resourceDto,
+            );
+        } else {
+            $instance->handle($context);
         }
     }
 
@@ -80,13 +103,15 @@ final class PipelineExecutor
                 throw new \RuntimeException("Failed to resolve handler {$handlerClass}: " . $e->getMessage(), 0, $e);
             }
 
-            if (method_exists($handler, 'handle') && is_object($handler)) {
-                $context->resourceDto = $handler->handle($context->requestDto, $context->resourceDto);
-                $context->lastHandlerClass = $handlerClass;
-            }
+            $this->invokeListener($handler, $context);
+            $context->lastHandlerClass = $handlerClass;
         }
     }
 
+    /**
+     * HandlerCompleted is a domain event dispatched once after the entire pipeline completes.
+     * It is NOT a pipeline phase — it is a side-effect for domain listeners (SSE push, analytics).
+     */
     private function dispatchHandlerCompleted(RequestPipelineContext $context): void
     {
         if (!$context->lastHandlerClass) {

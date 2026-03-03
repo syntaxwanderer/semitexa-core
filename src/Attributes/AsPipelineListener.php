@@ -7,11 +7,11 @@ namespace Semitexa\Core\Attributes;
 use Attribute;
 
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsPipelineListener
+final class AsPipelineListener
 {
     public function __construct(
-        public string $phase,
-        public int $priority = 0,
+        public readonly string $phase,
+        public readonly int $priority = 0,
     ) {
     }
 }

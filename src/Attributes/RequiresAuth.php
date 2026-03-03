@@ -7,6 +7,6 @@ namespace Semitexa\Core\Attributes;
 use Attribute;
 
 #[Attribute(Attribute::TARGET_CLASS)]
-class RequiresAuth
+final class RequiresAuth
 {
 }

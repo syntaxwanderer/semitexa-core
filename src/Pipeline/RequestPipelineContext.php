@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Pipeline;
 
-use Psr\Container\ContainerInterface;
 use Semitexa\Core\Auth\AuthResult;
 use Semitexa\Core\Request;
 
+/**
+ * Single mutable context object shared across all pipeline phases.
+ *
+ * Phases execute sequentially in one request scope: Access needs auth result,
+ * Handle needs access result. A single context that accumulates state is the natural model.
+ */
 class RequestPipelineContext
 {
     public ?object $resourceDto;
@@ -19,9 +24,7 @@ class RequestPipelineContext
         public readonly array $route,
         public readonly Request $request,
         ?object $resourceDto = null,
-        /** Optional: set by Application so pipeline listeners (e.g. AuthCheckListener) can resolve request-scoped services. */
-        public readonly ?ContainerInterface $requestScopedContainer = null,
-        /** Optional: set by Application when auth package is present so AuthCheckListener can run auth. */
+        /** Set by Application when auth package is present so AuthCheckListener can delegate to AuthBootstrapper. */
         public readonly ?object $authBootstrapper = null,
     ) {
         $this->resourceDto = $resourceDto;
