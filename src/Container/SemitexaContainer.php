@@ -257,6 +257,13 @@ final class SemitexaContainer implements ContainerInterface
             if (interface_exists($id)) {
                 continue;
             }
+            // Explicit opt-in via attribute takes priority
+            $ref = new \ReflectionClass($class);
+            if ($ref->getAttributes(\Semitexa\Core\Attributes\AsMutable::class) !== []) {
+                $this->mutableClasses[$class] = true;
+                continue;
+            }
+            // Fallback: legacy string matching (backward compatible)
             if (str_contains($class, 'Handler') || str_contains($class, 'Listener')) {
                 $this->mutableClasses[$class] = true;
             }

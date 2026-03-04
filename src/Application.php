@@ -221,6 +221,8 @@ class Application
             if (method_exists($reqDto, 'setHttpRequest')) {
                 $reqDto->setHttpRequest($request);
             }
+        } catch (\Semitexa\Core\Http\Exception\TypeMismatchException $e) {
+            return [$reqDto, Response::json(['errors' => [$e->field => [$e->getMessage()]]], 422)];
         } catch (\Throwable $e) {
             // Continue with empty DTO if hydration fails
         }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Http;
 
+use Semitexa\Core\Http\Exception\TypeMismatchException;
 use Semitexa\Core\Request;
 use ReflectionClass;
 use ReflectionNamedType;
@@ -15,9 +16,33 @@ use ReflectionUnionType;
  * For each key in raw data (JSON/POST/query + path params), calls set{CamelCase}($value)
  * if the method exists. Value is cast to the setter's parameter type before calling.
  * Path params are keyed by route param name (e.g. 'id' -> setId($value)).
+ *
+ * Strict mode: when enabled via enableStrictMode(true), type mismatches that cannot
+ * be meaningfully coerced throw TypeMismatchException instead of silently casting.
+ * Intended for use by semitexa-testing's InProcessTransport only.
  */
 class RequestDtoHydrator
 {
+    private static bool $strictTypes = false;
+
+    /**
+     * Enable or disable strict type checking during hydration.
+     * In strict mode, sending "hello" for an int field throws TypeMismatchException
+     * instead of casting it to 0.
+     *
+     * NOTE: This flag is global (static). Only safe to toggle in single-process
+     * test environments (PHPUnit CLI). Never enable in production or Swoole workers.
+     */
+    public static function enableStrictMode(bool $enabled = true): void
+    {
+        self::$strictTypes = $enabled;
+    }
+
+    public static function isStrictMode(): bool
+    {
+        return self::$strictTypes;
+    }
+
     public static function hydrate(object $dto, Request $httpRequest): object
     {
         $pathParams = self::extractPathParams($dto, $httpRequest);
@@ -39,7 +64,7 @@ class RequestDtoHydrator
 
             $param = $method->getParameters()[0];
             $type = $param->getType();
-            $typedValue = self::castValue($value, $type);
+            $typedValue = self::castValue($value, $type, $key);
             $method->invoke($dto, $typedValue);
         }
 
@@ -155,7 +180,7 @@ class RequestDtoHydrator
         return $data;
     }
 
-    private static function castValue(mixed $value, ?\ReflectionType $type): mixed
+    private static function castValue(mixed $value, ?\ReflectionType $type, string $fieldName = ''): mixed
     {
         if ($type === null) {
             return $value;
@@ -164,7 +189,7 @@ class RequestDtoHydrator
         if ($type instanceof ReflectionUnionType) {
             foreach ($type->getTypes() as $t) {
                 if ($t->getName() !== 'null') {
-                    return self::castToType($value, $t->getName());
+                    return self::castToType($value, $t->getName(), $fieldName);
                 }
             }
             return $value;
@@ -175,13 +200,13 @@ class RequestDtoHydrator
             if ($type->allowsNull() && ($value === null || $value === '')) {
                 return null;
             }
-            return self::castToType($value, $typeName);
+            return self::castToType($value, $typeName, $fieldName);
         }
 
         return $value;
     }
 
-    private static function castToType(mixed $value, string $type): mixed
+    private static function castToType(mixed $value, string $type, string $fieldName = ''): mixed
     {
         if ($value === null || $value === '') {
             return match ($type) {
@@ -193,6 +218,11 @@ class RequestDtoHydrator
             };
         }
 
+        // Strict mode: reject values that cannot be meaningfully coerced to the target type.
+        if (self::$strictTypes && !self::isTypeCompatible($value, $type)) {
+            throw new TypeMismatchException($fieldName, $type, $value);
+        }
+
         return match ($type) {
             'int' => (int) $value,
             'float' => (float) $value,
@@ -200,6 +230,21 @@ class RequestDtoHydrator
             'string' => (string) $value,
             'array' => is_array($value) ? $value : [$value],
             default => $value,
+        };
+    }
+
+    /**
+     * Determines whether $value can be meaningfully coerced to $type without semantic loss.
+     * Used only in strict mode to guard against obviously wrong input types.
+     */
+    private static function isTypeCompatible(mixed $value, string $type): bool
+    {
+        return match ($type) {
+            'int', 'float' => is_numeric($value) && !is_array($value),
+            'string'       => is_scalar($value),
+            'bool'         => is_bool($value) || in_array($value, [0, 1, '0', '1', 'true', 'false', 'yes', 'no', 'on', 'off'], true),
+            'array'        => is_array($value),
+            default        => true, // Objects and unknown types: leave to PHP
         };
     }
 
