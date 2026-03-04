@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core;
 
-use Semitexa\Core\Http\Request;
-use Semitexa\Core\Http\Response;
+use Semitexa\Core\Request;
+use Semitexa\Core\Response;
 use Semitexa\Core\Http\RouteType;
 use Semitexa\Core\Pipeline\RouteExecutor;
 use Semitexa\Core\Environment;

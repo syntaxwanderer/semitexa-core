@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Pipeline;
 
-use Semitexa\Core\Http\Request;
-use Semitexa\Core\Http\Response;
+use Semitexa\Core\Request;
+use Semitexa\Core\Response;
 use Semitexa\Core\Http\RequestDtoHydrator;
 use Semitexa\Core\Http\PayloadValidator;
 use Semitexa\Core\Http\Response\GenericResponse;
@@ -22,7 +22,7 @@ class RouteExecutor
         private readonly RequestScopedContainer $requestScopedContainer,
         private readonly ContainerInterface $container,
         /** @var \Semitexa\Auth\AuthBootstrapper|null */
-        private readonly $authBootstrapper = null,
+        private readonly ?object $authBootstrapper = null,
     ) {}
 
     /**
