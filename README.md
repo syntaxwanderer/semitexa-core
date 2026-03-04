@@ -9,7 +9,7 @@ Core framework functionality for Semitexa: request/response handling, attributes
 Usually included when you create or install a Semitexa application:
 
 ```bash
-composer require semitexa/core
+composer require semitexa/ultimate
 ```
 
 ## What's inside
