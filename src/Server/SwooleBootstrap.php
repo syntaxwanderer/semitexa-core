@@ -146,7 +146,7 @@ class SwooleBootstrap
                 $sent = true;
             } catch (\Throwable $e) {
                 try {
-                    $env = $app !== null ? $app->getEnvironment() : Environment::create();
+                    $env = $app !== null ? $app->environment : Environment::create();
                     self::handleError($e, $response, $env);
                     $sent = true;
                 } catch (\Throwable $inner) {
@@ -155,7 +155,7 @@ class SwooleBootstrap
             } finally {
                 unset(Coroutine::getContext()[self::COROUTINE_CONTEXT_KEY]);
                 if ($app !== null) {
-                    $app->getRequestScopedContainer()->reset();
+                    $app->requestScopedContainer->reset();
                 }
                 if (!$sent) {
                     $ensureResponseSent();

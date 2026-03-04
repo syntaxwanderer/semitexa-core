@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace Semitexa\Core;
 
-use Semitexa\Core\Request;
-use Semitexa\Core\Response;
+use Semitexa\Auth\AuthBootstrapper;
 use Semitexa\Core\Http\RouteType;
 use Semitexa\Core\Pipeline\RouteExecutor;
-use Semitexa\Core\Environment;
 use Semitexa\Core\Discovery\AttributeDiscovery;
-use Semitexa\Core\Log\LoggerInterface;
 use Semitexa\Core\Container\RequestScopedContainer;
 use Psr\Container\ContainerInterface;
 use Semitexa\Core\Event\EventDispatcherInterface;
@@ -27,9 +24,12 @@ use Semitexa\Core\Auth\AuthContextInterface;
 use Semitexa\Core\Auth\GuestAuthContext;
 use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Locale\DefaultLocaleContext;
+use Semitexa\Locale\LocaleBootstrapper;
 use Semitexa\Tenancy\Context\CoroutineContextStore;
 use Semitexa\Tenancy\Context\TenantContext as TenancyTenantContext;
 use Semitexa\Tenancy\TenancyBootstrapper;
+use Semitexa\Core\Http\SecurityHelper;
+
 /**
  * Minimal Semitexa Application
  */
@@ -40,19 +40,34 @@ class Application
 
     private static function measure(string $label, callable $fn): mixed
     {
-        if (class_exists(\Semitexa\Inspector\Profiler::class)) {
-            return \Semitexa\Inspector\Profiler::measure($label, $fn);
-        }
         return $fn();
     }
-    private Environment $environment;
-    private ContainerInterface $container;
-    private RequestScopedContainer $requestScopedContainer;
+
+    public Environment $environment {
+        get {
+            return $this->environment;
+        }
+    }
+
+    private ContainerInterface $container {
+        get {
+            return $this->container;
+        }
+    }
+
+    public RequestScopedContainer $requestScopedContainer {
+        get {
+            return $this->requestScopedContainer;
+        }
+    }
+
     private ?TenancyBootstrapper $tenancy = null;
-    /** @var \Semitexa\Auth\AuthBootstrapper|null */
-    private $authBootstrapper = null;
-    /** @var \Semitexa\Locale\LocaleBootstrapper|null */
-    private $localeBootstrapper = null;
+
+    /** @var AuthBootstrapper|null */
+    private ?AuthBootstrapper $authBootstrapper = null;
+
+    /** @var LocaleBootstrapper|null */
+    private ?LocaleBootstrapper $localeBootstrapper = null;
 
     public function __construct(?ContainerInterface $container = null)
     {
@@ -69,93 +84,79 @@ class Application
 
         $this->tenancy = new TenancyBootstrapper($events);
 
-        if (class_exists(\Semitexa\Auth\AuthBootstrapper::class)) {
-            $this->authBootstrapper = new \Semitexa\Auth\AuthBootstrapper($this->container, $events, $this->requestScopedContainer);
+        if (class_exists(AuthBootstrapper::class)) {
+            $this->authBootstrapper = new AuthBootstrapper($this->container, $events, $this->requestScopedContainer);
         }
-        if (class_exists(\Semitexa\Locale\LocaleBootstrapper::class)) {
-            $this->localeBootstrapper = new \Semitexa\Locale\LocaleBootstrapper($events);
+
+        if (class_exists(LocaleBootstrapper::class)) {
+            $this->localeBootstrapper = new LocaleBootstrapper($events);
         }
     }
-    
-    public function getContainer(): ContainerInterface
-    {
-        return $this->container;
-    }
-    
-    public function getRequestScopedContainer(): RequestScopedContainer
-    {
-        return $this->requestScopedContainer;
-    }
-    
-    public function getEnvironment(): Environment
-    {
-        return $this->environment;
-    }
-    
+
     public function handleRequest(Request $request): Response
     {
         return self::measure('Application::handleRequest', function() use ($request) {
             $runId = 'initial';
-        $segmentStart = microtime(true);
-        $this->debugLog('H1', 'Application::handleRequest', 'request_received', [
-            'path' => $request->getPath(),
-            'method' => $request->getMethod(),
-        ], $runId);
+            $segmentStart = microtime(true);
+            $this->debugLog('H1', 'Application::handleRequest', 'request_received', [
+                'path' => $request->getPath(),
+                'method' => $request->getMethod(),
+            ], $runId);
         
-        // Clear superglobals for security (prevent accidental use of unvalidated data)
-        \Semitexa\Core\Http\SecurityHelper::clearSuperglobals();
-        
-        // Resolve tenant context via tenancy module (coroutine-safe, event-driven)
-        if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
-            $tenantResponse = $this->tenancy->getHandler()->handle($request);
-            if ($tenantResponse !== null) {
-                return $tenantResponse; // Short-circuit: tenant not found or required
-            }
-        }
+            // Clear superglobals for security (prevent accidental use of unvalidated data)
+            SecurityHelper::clearSuperglobals();
 
-        // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
-        $this->initSessionAndCookies($request);
-
-        // Locale resolution (Tenant → Locale order; locale can use request path/header)
-        $this->resolveLocaleAndUpdateContainer($request);
-        
-        // Initialize attribute discovery
-        AttributeDiscovery::initialize();
-        
-        // Try to find route using AttributeDiscovery
-        $route = AttributeDiscovery::findRoute($request->getPath(), $request->getMethod());
-        $this->debugLog('H1', 'Application::handleRequest', 'route_discovery', [
-            'path' => $request->getPath(),
-            'method' => $request->getMethod(),
-            'routeFound' => (bool) $route,
-            'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),
-        ], $runId);
-        $segmentStart = microtime(true);
-        
-        // Route found or not - no debug output needed
-        $response = null;
-        if ($route) {
-            $response = $this->handleRoute($route, $request);
-        } else {
-            $path = $request->getPath();
-            if ($path === '/' || $path === '') {
-                $altPath = $path === '/' ? '' : '/';
-                $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
-                if ($route) {
-                    $response = $this->handleRoute($route, $request);
-                } else {
-                    $response = $this->helloWorld($request);
+            // Resolve tenant context via tenancy module (coroutine-safe, event-driven)
+            if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
+                $tenantResponse = $this->tenancy->getHandler()->handle($request);
+                if ($tenantResponse !== null) {
+                    return $tenantResponse; // Short-circuit: tenant not found or required
                 }
+            }
+
+            // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
+            $this->initSessionAndCookies($request);
+
+            // Locale resolution (Tenant → Locale order; locale can use request path/header)
+            $this->resolveLocaleAndUpdateContainer($request);
+
+            // Initialize attribute discovery
+            AttributeDiscovery::initialize();
+
+            // Try to find route using AttributeDiscovery
+            $route = AttributeDiscovery::findRoute($request->getPath(), $request->getMethod());
+            $this->debugLog('H1', 'Application::handleRequest', 'route_discovery', [
+                'path' => $request->getPath(),
+                'method' => $request->getMethod(),
+                'routeFound' => (bool) $route,
+                'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),
+            ], $runId);
+            $segmentStart = microtime(true);
+        
+            // Route found or not - no debug output needed
+            $response = null;
+            if ($route) {
+                $response = $this->handleRoute($route, $request);
             } else {
                 $path = $request->getPath();
-                if ($path === '/sse' && $request->getMethod() === 'GET') {
-                    // SSE support requires semitexa/ssr package
+                if ($path === '/' || $path === '') {
+                    $altPath = $path === '/' ? '' : '/';
+                    $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
+                    if ($route) {
+                        $response = $this->handleRoute($route, $request);
+                    } else {
+                        $response = $this->helloWorld($request);
+                    }
+                } else {
+                    $path = $request->getPath();
+                    if ($path === '/sse' && $request->getMethod() === 'GET') {
+                        // SSE support requires semitexa/ssr package
+                    }
+                    $response = $this->getNotFoundResponse($request);
                 }
-                $response = $this->getNotFoundResponse($request);
             }
-        }
 
-        return $this->finalizeSessionAndCookies($request, $response);
+            return $this->finalizeSessionAndCookies($request, $response);
         });
     }
     
