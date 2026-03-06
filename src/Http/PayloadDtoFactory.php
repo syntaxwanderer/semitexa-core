@@ -1,0 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Semitexa\Core\Http;
+
+/**
+ * Creates DTO instances with dynamically composed traits from AsPayloadPart/AsResourcePart.
+ *
+ * When traits are specified, a wrapper class is generated via eval() that extends the base
+ * and uses all applicable traits. The wrapper is created once per Swoole worker and cached.
+ */
+final class PayloadDtoFactory
+{
+    private static array $classCache = [];
+
+    public static function createInstance(string $baseClass, array $traits): object
+    {
+        if (empty($traits)) {
+            return new $baseClass();
+        }
+
+        $cacheKey = $baseClass . "\0" . implode("\0", $traits);
+        if (!isset(self::$classCache[$cacheKey])) {
+            self::$classCache[$cacheKey] = self::buildWrapperClass($baseClass, $traits);
+        }
+
+        $wrapperClass = self::$classCache[$cacheKey];
+        return new $wrapperClass();
+    }
+
+    private static function buildWrapperClass(string $baseClass, array $traits): string
+    {
+        $hash = substr(md5($baseClass . implode(',', $traits)), 0, 10);
+        $className = 'PayloadWrapper_' . $hash;
+        $fqn = 'Semitexa\\Runtime\\' . $className;
+
+        if (!class_exists($fqn, false)) {
+            $traitUses = implode("\n    ", array_map(
+                fn(string $t) => 'use \\' . ltrim($t, '\\') . ';',
+                $traits
+            ));
+            eval("namespace Semitexa\\Runtime; class {$className} extends \\" . ltrim($baseClass, '\\') . " { {$traitUses} }");
+        }
+
+        return $fqn;
+    }
+}
