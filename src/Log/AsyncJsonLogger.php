@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Log;
 
-use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\SatisfiesServiceContract;
 use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Environment;
 
@@ -12,7 +12,7 @@ use Semitexa\Core\Environment;
  * Logger that writes JSON lines to a file. Under Swoole, writes are deferred so the request is not blocked.
  * Environment is injected by the container (InjectAsReadonly); config is resolved lazily on first use.
  */
-#[AsServiceContract(of: LoggerInterface::class)]
+#[SatisfiesServiceContract(of: LoggerInterface::class)]
 final class AsyncJsonLogger implements LoggerInterface
 {
     private const DEFAULT_LOG_FILE = 'var/log/app.log';

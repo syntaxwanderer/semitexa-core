@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Container;
 
-use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\SatisfiesRepositoryContract;
+use Semitexa\Core\Attributes\SatisfiesServiceContract;
 use Semitexa\Core\Contract\HandlerInterface;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Environment;
@@ -57,7 +58,10 @@ final class ServiceContractRegistry
     private function build(): void
     {
         ClassDiscovery::initialize();
-        $candidates = ClassDiscovery::findClassesWithAttribute(AsServiceContract::class);
+        $candidates = array_unique(array_merge(
+            ClassDiscovery::findClassesWithAttribute(SatisfiesServiceContract::class),
+            ClassDiscovery::findClassesWithAttribute(SatisfiesRepositoryContract::class)
+        ));
 
         /** @var array<string, array<int, array{module: string, impl: string}>> interface => list of {module, impl} */
         $byInterface = [];
@@ -68,19 +72,16 @@ final class ServiceContractRegistry
                 if (!$ref->isInstantiable()) {
                     continue;
                 }
-                $attrs = $ref->getAttributes(AsServiceContract::class);
+
+                $attrs = array_merge(
+                    $ref->getAttributes(SatisfiesServiceContract::class),
+                    $ref->getAttributes(SatisfiesRepositoryContract::class)
+                );
+
                 if ($attrs === []) {
                     continue;
                 }
-                /** @var AsServiceContract $attr */
-                $attr = $attrs[0]->newInstance();
-                $interface = ltrim($attr->of, '\\');
-                if (!interface_exists($interface)) {
-                    continue;
-                }
-                if (!$ref->implementsInterface($interface)) {
-                    continue;
-                }
+
                 $moduleName = ModuleRegistry::getModuleNameForClass($implClass);
                 if ($moduleName === null) {
                     // Classes from Semitexa\Core (e.g. AsyncJsonLogger) are treated as module "Core"
@@ -89,7 +90,16 @@ final class ServiceContractRegistry
                     }
                     $moduleName = 'Core';
                 }
-                $byInterface[$interface][] = ['module' => $moduleName, 'impl' => $implClass];
+
+                foreach ($attrs as $reflectionAttribute) {
+                    /** @var SatisfiesServiceContract|SatisfiesRepositoryContract $attr */
+                    $attr = $reflectionAttribute->newInstance();
+                    $interface = ltrim($attr->of, '\\');
+                    if (!interface_exists($interface) || !$ref->implementsInterface($interface)) {
+                        continue;
+                    }
+                    $byInterface[$interface][] = ['module' => $moduleName, 'impl' => $implClass];
+                }
             } catch (\Throwable $e) {
                 if (Environment::getEnvValue('APP_DEBUG') === '1') {
                     error_log("[Semitexa] ServiceContractRegistry::build() failed for {$implClass}: " . $e->getMessage());
