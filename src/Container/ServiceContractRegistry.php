@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Container;
 
-use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\SatisfiesRepositoryContract;
+use Semitexa\Core\Attributes\SatisfiesServiceContract;
 use Semitexa\Core\Contract\HandlerInterface;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Environment;
@@ -57,7 +58,7 @@ final class ServiceContractRegistry
     private function build(): void
     {
         ClassDiscovery::initialize();
-        $candidates = ClassDiscovery::findClassesWithAttribute(AsServiceContract::class);
+        $candidates = ClassDiscovery::findClassesWithAttribute(SatisfiesServiceContract::class);
 
         /** @var array<string, array<int, array{module: string, impl: string}>> interface => list of {module, impl} */
         $byInterface = [];
@@ -68,11 +69,17 @@ final class ServiceContractRegistry
                 if (!$ref->isInstantiable()) {
                     continue;
                 }
-                $attrs = $ref->getAttributes(AsServiceContract::class);
+
+                $attrs = array_merge(
+                    $ref->getAttributes(SatisfiesServiceContract::class),
+                    $ref->getAttributes(SatisfiesRepositoryContract::class)
+                );
+
                 if ($attrs === []) {
                     continue;
                 }
-                /** @var AsServiceContract $attr */
+
+                /** @var SatisfiesServiceContract|SatisfiesRepositoryContract $attr */
                 $attr = $attrs[0]->newInstance();
                 $interface = ltrim($attr->of, '\\');
                 if (!interface_exists($interface)) {

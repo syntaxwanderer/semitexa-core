@@ -14,7 +14,7 @@ use Attribute;
  * (child module has higher priority).
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final class AsServiceContract
+final class SatisfiesServiceContract
 {
     public function __construct(
         /** Contract (interface) that this class implements */
