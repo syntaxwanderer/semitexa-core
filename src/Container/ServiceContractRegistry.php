@@ -58,7 +58,10 @@ final class ServiceContractRegistry
     private function build(): void
     {
         ClassDiscovery::initialize();
-        $candidates = ClassDiscovery::findClassesWithAttribute(SatisfiesServiceContract::class);
+        $candidates = array_unique(array_merge(
+            ClassDiscovery::findClassesWithAttribute(SatisfiesServiceContract::class),
+            ClassDiscovery::findClassesWithAttribute(SatisfiesRepositoryContract::class)
+        ));
 
         /** @var array<string, array<int, array{module: string, impl: string}>> interface => list of {module, impl} */
         $byInterface = [];
@@ -79,15 +82,6 @@ final class ServiceContractRegistry
                     continue;
                 }
 
-                /** @var SatisfiesServiceContract|SatisfiesRepositoryContract $attr */
-                $attr = $attrs[0]->newInstance();
-                $interface = ltrim($attr->of, '\\');
-                if (!interface_exists($interface)) {
-                    continue;
-                }
-                if (!$ref->implementsInterface($interface)) {
-                    continue;
-                }
                 $moduleName = ModuleRegistry::getModuleNameForClass($implClass);
                 if ($moduleName === null) {
                     // Classes from Semitexa\Core (e.g. AsyncJsonLogger) are treated as module "Core"
@@ -96,7 +90,16 @@ final class ServiceContractRegistry
                     }
                     $moduleName = 'Core';
                 }
-                $byInterface[$interface][] = ['module' => $moduleName, 'impl' => $implClass];
+
+                foreach ($attrs as $reflectionAttribute) {
+                    /** @var SatisfiesServiceContract|SatisfiesRepositoryContract $attr */
+                    $attr = $reflectionAttribute->newInstance();
+                    $interface = ltrim($attr->of, '\\');
+                    if (!interface_exists($interface) || !$ref->implementsInterface($interface)) {
+                        continue;
+                    }
+                    $byInterface[$interface][] = ['module' => $moduleName, 'impl' => $implClass];
+                }
             } catch (\Throwable $e) {
                 if (Environment::getEnvValue('APP_DEBUG') === '1') {
                     error_log("[Semitexa] ServiceContractRegistry::build() failed for {$implClass}: " . $e->getMessage());
