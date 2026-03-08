@@ -47,6 +47,7 @@ class ContainerFactory
 
         $orm = new \Semitexa\Orm\OrmManager();
         $container->set(\Semitexa\Orm\OrmManager::class, $orm);
+        $container->set(\Semitexa\Orm\Adapter\ConnectionPoolInterface::class, $orm->getPool());
         $container->set(\Semitexa\Orm\Adapter\DatabaseAdapterInterface::class, $orm->getAdapter());
         $container->set(\Semitexa\Orm\Transaction\TransactionManager::class, $orm->getTransactionManager());
     }
