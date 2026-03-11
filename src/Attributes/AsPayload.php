@@ -55,7 +55,12 @@ class AsPayload
         public ?array $tags = null,
         public ?bool $public = null,
         public string $protocol = 'http',
+        /** @var list<string>|null Request Content-Types this endpoint accepts. null = all. */
+        public ?array $consumes = null,
     ) {
         $this->doc = $doc;
+        if ($this->consumes !== null) {
+            $this->consumes = array_map('strtolower', $this->consumes);
+        }
     }
 }

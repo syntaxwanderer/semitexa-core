@@ -8,6 +8,7 @@ use Semitexa\Core\Application;
 use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Environment;
 use Semitexa\Core\ErrorHandler;
+use Semitexa\Core\Http\SwooleResponseEmitter;
 use Semitexa\Core\Request;
 use Semitexa\Core\Session\SwooleSessionTableHolder;
 use Semitexa\Ssr\Asset\ModuleAssetRegistry;
@@ -134,23 +135,12 @@ class SwooleBootstrap
             $app = null;
 
             try {
+                $emitter = new SwooleResponseEmitter();
                 $app = new Application();
                 $semitexaRequest = Request::create($request);
                 $semitexaResponse = $app->handleRequest($semitexaRequest);
 
-                $response->status($semitexaResponse->getStatusCode());
-                foreach ($semitexaResponse->getHeaders() as $name => $value) {
-                    if (is_array($value)) {
-                        foreach ($value as $line) {
-                            $response->header($name, (string) $line);
-                        }
-                    } else {
-                        $response->header($name, (string) $value);
-                    }
-                }
-                if (!$semitexaResponse->isAlreadySent()) {
-                    $response->end($semitexaResponse->getContent());
-                }
+                $emitter->emit($semitexaResponse, $response);
                 $sent = true;
             } catch (\Throwable $e) {
                 try {

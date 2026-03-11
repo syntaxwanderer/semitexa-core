@@ -12,6 +12,8 @@ use Semitexa\Core\Http\Response\GenericResponse;
 use Semitexa\Core\Discovery\AttributeDiscovery;
 use Semitexa\Core\Http\PayloadDtoFactory;
 use Semitexa\Core\Http\Response\ResponseFormat;
+use Semitexa\Core\Http\ContentNegotiator;
+use Semitexa\Core\Http\Exception\NegotiationFailedException;
 use Semitexa\Core\Pipeline\Exception\AuthenticationRequiredException;
 use Semitexa\Core\Pipeline\Exception\AccessDeniedException;
 use Psr\Container\ContainerInterface;
@@ -32,6 +34,19 @@ class RouteExecutor
     public function execute(array $route, Request $request): Response
     {
         try {
+            // 0. Reject unsupported Content-Type early
+            $consumesResult = ContentNegotiator::checkConsumes(
+                $route['consumes'] ?? null,
+                $request
+            );
+            if ($consumesResult !== true) {
+                return Response::json([
+                    'error' => 'Unsupported Media Type',
+                    'message' => "Content-Type '{$consumesResult}' is not supported.",
+                    'supported' => $route['consumes'],
+                ], 415);
+            }
+
             // 1. Hydrate and Validate
             [$reqDto, $validationResponse] = $this->hydrateRequest($route, $request);
             if ($validationResponse) {
@@ -56,7 +71,7 @@ class RouteExecutor
             $resDto = $context->resourceDto;
 
             // 5. Render Response
-            $resDto = $this->renderResponse($resDto, $reqDto);
+            $resDto = $this->renderResponse($resDto, $reqDto, $request, $route);
 
             // 6. Adapt to Core Response
             return $this->adaptResponse($resDto);
@@ -140,7 +155,7 @@ class RouteExecutor
         return $resDto;
     }
 
-    private function renderResponse(object $resDto, ?object $reqDto): object
+    private function renderResponse(object $resDto, ?object $reqDto, Request $request, array $route): object
     {
         if (!method_exists($resDto, 'getRenderHandle')) {
             return $resDto;
@@ -154,46 +169,143 @@ class RouteExecutor
         $context = method_exists($resDto, 'getRenderContext') ? $resDto->getRenderContext() : [];
         /** @var ResponseFormat|null $format */
         $format = method_exists($resDto, 'getRenderFormat') ? $resDto->getRenderFormat() : null;
+        $rendererClass = method_exists($resDto, 'getRendererClass') ? $resDto->getRendererClass() : null;
+
+        // Negotiate format when produces is set on the route
+        $produces = $route['produces'] ?? null;
+        if ($produces !== null && $produces !== []) {
+            try {
+                $defaultKey = $format !== null ? self::formatEnumToKey($format) : 'json';
+                $negotiatedKey = ContentNegotiator::negotiateResponseFormat($produces, $request, $defaultKey);
+                $format = self::keyToFormatEnum($negotiatedKey);
+            } catch (NegotiationFailedException $e) {
+                return Response::json([
+                    'error' => 'Not Acceptable',
+                    'message' => $e->getMessage(),
+                    'available' => $e->produces,
+                ], 406);
+            }
+        }
+
         if ($format === null) {
             $format = ResponseFormat::Layout;
         }
-        $rendererClass = method_exists($resDto, 'getRendererClass') ? $resDto->getRendererClass() : null;
 
-        if ($format === ResponseFormat::Json) {
-            $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if (method_exists($resDto, 'setContent')) {
-                $resDto->setContent($json ?: '');
-            }
-            if (method_exists($resDto, 'setHeader')) {
-                $resDto->setHeader('Content-Type', 'application/json');
-            }
-        } elseif ($format === ResponseFormat::Layout) {
-            $renderer = $rendererClass ?: 'Semitexa\\Ssr\\Layout\\LayoutRenderer';
-            if (!class_exists($renderer)) {
-                throw new \RuntimeException(
-                    'LayoutRenderer not found. For HTML pages install semitexa/ssr: composer require semitexa/ssr. Do not implement a custom Twig renderer in the project.'
-                );
-            }
-            
-            if (!isset($context['response'])) {
-                $context = ['response' => $context] + $context;
-            }
-            if (!isset($context['request']) && isset($reqDto)) {
-                $context['request'] = $reqDto;
-            }
-            if (method_exists($resDto, 'getLayoutFrame') && $resDto->getLayoutFrame() !== null) {
-                $context['layout_frame'] = $resDto->getLayoutFrame();
-            }
-            $html = $renderer::renderHandle($handle, $context);
-            if (method_exists($resDto, 'setContent')) {
-                $resDto->setContent($html);
-            }
-            if (method_exists($resDto, 'setHeader')) {
-                $resDto->setHeader('Content-Type', 'text/html; charset=utf-8');
-            }
+        return match ($format) {
+            ResponseFormat::Json   => $this->renderJson($resDto, $context),
+            ResponseFormat::Layout => $this->renderLayout($resDto, $reqDto, $handle, $context, $rendererClass),
+            ResponseFormat::Xml    => $this->renderXml($resDto, $context),
+            ResponseFormat::Text   => $this->renderText($resDto, $context),
+            ResponseFormat::Raw    => $resDto,
+        };
+    }
+
+    private function renderJson(object $resDto, array $context): object
+    {
+        $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (method_exists($resDto, 'setContent')) {
+            $resDto->setContent($json ?: '');
+        }
+        if (method_exists($resDto, 'setHeader')) {
+            $resDto->setHeader('Content-Type', 'application/json');
+        }
+        return $resDto;
+    }
+
+    private function renderLayout(object $resDto, ?object $reqDto, string $handle, array $context, ?string $rendererClass): object
+    {
+        $renderer = $rendererClass ?: 'Semitexa\\Ssr\\Layout\\LayoutRenderer';
+        if (!class_exists($renderer)) {
+            throw new \RuntimeException(
+                'LayoutRenderer not found. For HTML pages install semitexa/ssr: composer require semitexa/ssr. Do not implement a custom Twig renderer in the project.'
+            );
         }
 
+        if (!isset($context['response'])) {
+            $context = ['response' => $context] + $context;
+        }
+        if (!isset($context['request']) && isset($reqDto)) {
+            $context['request'] = $reqDto;
+        }
+        if (method_exists($resDto, 'getLayoutFrame') && $resDto->getLayoutFrame() !== null) {
+            $context['layout_frame'] = $resDto->getLayoutFrame();
+        }
+        $html = $renderer::renderHandle($handle, $context);
+        if (method_exists($resDto, 'setContent')) {
+            $resDto->setContent($html);
+        }
+        if (method_exists($resDto, 'setHeader')) {
+            $resDto->setHeader('Content-Type', 'text/html; charset=utf-8');
+        }
         return $resDto;
+    }
+
+    private function renderXml(object $resDto, array $context): object
+    {
+        $xml = self::arrayToXml($context, 'response');
+        if (method_exists($resDto, 'setContent')) {
+            $resDto->setContent($xml);
+        }
+        if (method_exists($resDto, 'setHeader')) {
+            $resDto->setHeader('Content-Type', 'application/xml; charset=utf-8');
+        }
+        return $resDto;
+    }
+
+    private function renderText(object $resDto, array $context): object
+    {
+        $text = $context['text'] ?? json_encode($context, JSON_PRETTY_PRINT);
+        if (method_exists($resDto, 'setContent')) {
+            $resDto->setContent($text);
+        }
+        if (method_exists($resDto, 'setHeader')) {
+            $resDto->setHeader('Content-Type', 'text/plain; charset=utf-8');
+        }
+        return $resDto;
+    }
+
+    private static function arrayToXml(array $data, string $rootElement = 'root'): string
+    {
+        $xml = new \SimpleXMLElement("<{$rootElement}/>");
+        self::arrayToXmlRecursive($data, $xml);
+        $dom = dom_import_simplexml($xml)->ownerDocument;
+        $dom->formatOutput = true;
+        return $dom->saveXML();
+    }
+
+    private static function arrayToXmlRecursive(array $data, \SimpleXMLElement $xml): void
+    {
+        foreach ($data as $key => $value) {
+            $key = is_int($key) ? 'item' : $key;
+            if (is_array($value)) {
+                $child = $xml->addChild($key);
+                self::arrayToXmlRecursive($value, $child);
+            } else {
+                $xml->addChild($key, htmlspecialchars((string) ($value ?? ''), ENT_XML1));
+            }
+        }
+    }
+
+    private static function formatEnumToKey(ResponseFormat $format): string
+    {
+        return match ($format) {
+            ResponseFormat::Json   => 'json',
+            ResponseFormat::Layout => 'html',
+            ResponseFormat::Xml    => 'xml',
+            ResponseFormat::Text   => 'txt',
+            ResponseFormat::Raw    => 'json',
+        };
+    }
+
+    private static function keyToFormatEnum(string $key): ResponseFormat
+    {
+        return match ($key) {
+            'json' => ResponseFormat::Json,
+            'html' => ResponseFormat::Layout,
+            'xml'  => ResponseFormat::Xml,
+            'txt'  => ResponseFormat::Text,
+            default => ResponseFormat::Json,
+        };
     }
 
     private function adaptResponse(object $resDto): Response

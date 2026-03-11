@@ -27,7 +27,7 @@ use Semitexa\Locale\LocaleBootstrapper;
 use Semitexa\Tenancy\Context\CoroutineContextStore;
 use Semitexa\Tenancy\Context\TenantContext as TenancyTenantContext;
 use Semitexa\Tenancy\TenancyBootstrapper;
-use Semitexa\Core\Http\SecurityHelper;
+
 
 /**
  * Minimal Semitexa Application
@@ -102,9 +102,6 @@ class Application
                 'method' => $request->getMethod(),
             ], $runId);
         
-            // Clear superglobals for security (prevent accidental use of unvalidated data)
-            SecurityHelper::clearSuperglobals();
-
             // Resolve tenant context via tenancy module (coroutine-safe, event-driven)
             if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
                 $tenantResponse = $this->tenancy->getHandler()->handle($request);

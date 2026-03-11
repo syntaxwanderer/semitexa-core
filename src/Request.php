@@ -127,6 +127,14 @@ readonly class Request
         $contentType = $this->getHeader('Content-Type');
         return $contentType !== null && str_contains(strtolower($contentType), 'application/json');
     }
+
+    public function isXml(): bool
+    {
+        $ct = $this->getHeader('Content-Type');
+        if ($ct === null) return false;
+        $lower = strtolower($ct);
+        return str_contains($lower, 'application/xml') || str_contains($lower, 'text/xml');
+    }
     
     /**
      * Get parsed JSON body as array
