@@ -107,24 +107,4 @@ readonly class Response implements ResourceInterface
         }
         return new self($this->content, $this->statusCode, $merged, $this->alreadySent);
     }
-    
-    public function send(): void
-    {
-        // Set status code
-        http_response_code($this->statusCode);
-        
-        // Set headers (support multiple values, e.g. Set-Cookie)
-        foreach ($this->headers as $name => $value) {
-            if (is_array($value)) {
-                foreach ($value as $v) {
-                    header("$name: $v");
-                }
-            } else {
-                header("$name: $value");
-            }
-        }
-        
-        // Output content
-        echo $this->content;
-    }
 }

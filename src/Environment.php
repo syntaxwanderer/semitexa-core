@@ -39,15 +39,9 @@ readonly class Environment
     public static function create(): self
     {
         $fileEnv = self::loadEnv();
-        
-        $get = fn(string $key, $default = null) => 
-            getenv($key) !== false ? getenv($key) : (
-                $_ENV[$key] ?? (
-                    $_SERVER[$key] ?? (
-                        $fileEnv[$key] ?? $default
-                    )
-                )
-            );
+
+        $get = fn(string $key, $default = null) =>
+            getenv($key) !== false ? getenv($key) : ($fileEnv[$key] ?? $default);
         
         return new self(
             appEnv: $get('APP_ENV', 'prod'),
@@ -159,37 +153,32 @@ readonly class Environment
     }
     
     /**
-     * Get any environment variable value (not just predefined ones)
-     * Checks .env, .env.local, and $_ENV/$_SERVER
-     * 
+     * Get any environment variable value (not just predefined ones).
+     * Checks getenv() first, then cached .env/.env.local values.
+     * The .env file cache is parsed once per worker and reused across requests.
+     *
      * @param string $key Environment variable name
      * @param string|null $default Default value if not found
      * @return string|null
      */
     public static function getEnvValue(string $key, ?string $default = null): ?string
     {
-        // 1. System Env (getenv)
+        // 1. Process env (populated by syncEnvFromFiles() at WorkerStart)
         $value = getenv($key);
         if ($value !== false) {
             return $value;
         }
 
-        // 2. $_ENV
-        if (isset($_ENV[$key])) {
-            return $_ENV[$key];
+        // 2. Cached .env file values (parsed once per worker)
+        /** @var array<string, string>|null $cache */
+        static $cache = null;
+        if ($cache === null) {
+            $cache = self::loadEnv();
         }
-        
-        // 3. $_SERVER
-        if (isset($_SERVER[$key])) {
-            return $_SERVER[$key];
+        if (isset($cache[$key])) {
+            return $cache[$key];
         }
 
-        // 4. .env files
-        $env = self::loadEnv();
-        if (isset($env[$key])) {
-            return $env[$key];
-        }
-        
         return $default;
     }
 

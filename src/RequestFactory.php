@@ -147,23 +147,4 @@ class RequestFactory
         }
         return $out;
     }
-
-    private static function getHeaders(): array
-    {
-        $headers = [];
-        
-        if (function_exists('getallheaders')) {
-            $headers = getallheaders();
-        } else {
-            // Fallback for servers without getallheaders()
-            foreach ($_SERVER as $key => $value) {
-                if (str_starts_with($key, 'HTTP_')) {
-                    $headerName = str_replace('_', '-', substr($key, 5));
-                    $headers[$headerName] = $value;
-                }
-            }
-        }
-        
-        return $headers;
-    }
 }
