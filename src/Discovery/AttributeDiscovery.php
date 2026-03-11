@@ -301,6 +301,7 @@ class AttributeDiscovery
                         'responseWith' => $attr->responseWith !== null ? EnvValueResolver::resolve($attr->responseWith) : null,
                         'base' => $attr->base ? ltrim($attr->base, '\\') : null,
                         'overrides' => $attr->overrides ? ltrim($attr->overrides, '\\') : null,
+                        'consumes' => $attr->consumes,
                     ],
                 ];
                 $requestMeta[$className] = $meta;
@@ -362,6 +363,16 @@ class AttributeDiscovery
                 'handlers' => [],
             ];
 
+            // Resolve produces from the AsResource on the response class
+            $routeProduces = null;
+            $responseClass = $resolved['responseWith'] ?? null;
+            if ($responseClass !== null) {
+                $resolvedResp = self::getResolvedResponseAttributes($responseClass);
+                if ($resolvedResp !== null && isset($resolvedResp['produces'])) {
+                    $routeProduces = $resolvedResp['produces'];
+                }
+            }
+
             self::$routes[] = [
                 'path' => $resolved['path'],
                 'methods' => $resolved['methods'],
@@ -373,7 +384,9 @@ class AttributeDiscovery
                 'options' => $resolved['options'],
                 'tags' => $resolved['tags'],
                 'public' => $resolved['public'],
-                'type' => 'http-request'
+                'type' => 'http-request',
+                'consumes' => $resolved['consumes'] ?? null,
+                'produces' => $routeProduces,
             ];
 
             foreach ($candidates as $candidate) {
@@ -493,7 +506,7 @@ class AttributeDiscovery
     private static function mergeRequestAttributes(array $base, array $override): array
     {
         $result = $base;
-        foreach (['path','methods','name','requirements','defaults','options','tags','public','responseWith'] as $key) {
+        foreach (['path','methods','name','requirements','defaults','options','tags','public','responseWith','consumes'] as $key) {
             if ($override[$key] !== null) {
                 $result[$key] = $override[$key];
             }
@@ -516,6 +529,7 @@ class AttributeDiscovery
             'tags' => $attr['tags'] ?? [],
             'public' => $attr['public'] ?? true,
             'responseWith' => $attr['responseWith'],
+            'consumes' => $attr['consumes'] ?? null,
         ];
     }
 
@@ -553,6 +567,7 @@ class AttributeDiscovery
                         'renderer' => $attr->renderer !== null ? EnvValueResolver::resolve($attr->renderer) : null,
                         'context' => $attr->context ?? [],
                         'base' => $attr->base !== null && $attr->base !== '' ? ltrim($attr->base, '\\') : null,
+                        'produces' => $attr->produces,
                     ],
                 ];
                 $responseMeta[$className] = $meta;
@@ -611,7 +626,7 @@ class AttributeDiscovery
     private static function mergeResponseAttributes(array $base, array $override): array
     {
         $result = $base;
-        foreach (['handle', 'format', 'renderer', 'context'] as $key) {
+        foreach (['handle', 'format', 'renderer', 'context', 'produces'] as $key) {
             if ($override[$key] !== null && $override[$key] !== []) {
                 $result[$key] = $override[$key];
             }
@@ -627,6 +642,7 @@ class AttributeDiscovery
             'format' => $attr['format'] ?? null,
             'renderer' => $attr['renderer'] ?? null,
             'context' => $attr['context'] ?? [],
+            'produces' => $attr['produces'] ?? null,
         ];
     }
 

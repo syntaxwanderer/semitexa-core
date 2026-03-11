@@ -9,6 +9,8 @@ enum ResponseFormat: string
     case Layout = 'layout';
     case Json = 'json';
     case Raw = 'raw';
+    case Xml = 'xml';
+    case Text = 'text';
 }
 
 

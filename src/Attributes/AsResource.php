@@ -26,7 +26,12 @@ class AsResource
         public ?array $context = null,
         public ?ResponseFormat $format = null,
         public ?string $renderer = null,
+        /** @var list<string>|null Response Content-Types this resource can produce. null = format-driven. */
+        public ?array $produces = null,
     ) {
         $this->doc = $doc;
+        if ($this->produces !== null) {
+            $this->produces = array_map('strtolower', $this->produces);
+        }
     }
 }

@@ -175,6 +175,8 @@ class RequestDtoHydrator
                     $data = array_merge($data, $decoded);
                 }
             }
+        } elseif ($httpRequest->isXml() && $httpRequest->getContent()) {
+            $data = array_merge($data, self::xmlToArray($httpRequest->getContent()));
         } else {
             $data = array_merge($data, $httpRequest->post);
         }
@@ -186,6 +188,15 @@ class RequestDtoHydrator
         }
 
         return $data;
+    }
+
+    private static function xmlToArray(string $xml): array
+    {
+        $element = @simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NOENT);
+        if ($element === false) {
+            return [];
+        }
+        return json_decode(json_encode($element), true) ?: [];
     }
 
     private static function castValue(mixed $value, ?\ReflectionType $type, string $fieldName = ''): mixed
