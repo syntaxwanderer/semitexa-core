@@ -88,7 +88,8 @@ class Application
         }
 
         if (class_exists(LocaleBootstrapper::class)) {
-            $this->localeBootstrapper = new LocaleBootstrapper($events);
+            $localeManager = new \Semitexa\Locale\Context\LocaleManager();
+            $this->localeBootstrapper = new LocaleBootstrapper($localeManager, events: $events);
         }
     }
 
@@ -378,10 +379,11 @@ class Application
         if ($this->localeBootstrapper === null || !$this->localeBootstrapper->isEnabled()) {
             return;
         }
-        $this->localeBootstrapper->resolve($request);
-        if (class_exists(\Semitexa\Locale\Context\LocaleManager::class)) {
-            $this->requestScopedContainer->set(LocaleContextInterface::class, \Semitexa\Locale\Context\LocaleManager::getInstance());
-        }
+        $cookieJar = $this->requestScopedContainer->has(CookieJarInterface::class)
+            ? $this->requestScopedContainer->get(CookieJarInterface::class)
+            : null;
+        $this->localeBootstrapper->resolve($request, $cookieJar);
+        $this->requestScopedContainer->set(LocaleContextInterface::class, $this->localeBootstrapper->getLocaleContext());
     }
 
     /**
