@@ -31,6 +31,13 @@ readonly class LocaleValue implements TenantLayerValueInterface
 
     public static function fromCode(string $code): self
     {
-        return new self(strtolower($code));
+        $parts = explode('-', $code, 2);
+        $normalized = strtolower($parts[0]);
+
+        if (isset($parts[1])) {
+            $normalized .= '-' . strtoupper($parts[1]);
+        }
+
+        return new self($normalized);
     }
 }
