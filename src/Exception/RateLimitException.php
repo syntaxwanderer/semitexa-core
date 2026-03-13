@@ -22,6 +22,11 @@ class RateLimitException extends DomainException
         return HttpStatus::TooManyRequests;
     }
 
+    public function getRetryAfter(): int
+    {
+        return $this->retryAfter;
+    }
+
     public function getErrorContext(): array
     {
         return ['retry_after' => $this->retryAfter];

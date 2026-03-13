@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Pipeline;
 
 use Semitexa\Core\Exception\DomainException;
+use Semitexa\Core\Exception\RateLimitException;
 use Semitexa\Core\Http\ContentNegotiator;
 use Semitexa\Core\Http\HttpStatus;
 use Semitexa\Core\Request;
@@ -39,22 +40,25 @@ final class ExceptionMapper
 
         $format = $this->negotiateErrorFormat($request, $route);
 
-        return match ($format) {
+        $response = match ($format) {
             'json' => Response::json($body, $status->value),
             'html' => $this->renderErrorHtml($status, $body),
             'xml'  => Response::text($this->arrayToXml($body, 'error'), $status->value)
                           ->withHeaders(['Content-Type' => 'application/xml; charset=utf-8']),
             default => Response::text($e->getMessage(), $status->value),
         };
+
+        if ($e instanceof RateLimitException) {
+            $response = $response->withHeaders(['Retry-After' => (string) $e->getRetryAfter()]);
+        }
+
+        return $response;
     }
 
-    private function mapUnknownException(\Throwable $e): Response
+    private function mapUnknownException(\Throwable $e): never
     {
-        // Never expose internal details — log externally, return generic error
-        return Response::json([
-            'error' => 'internal_error',
-            'message' => 'An unexpected error occurred.',
-        ], HttpStatus::InternalServerError->value);
+        // Rethrow so Application/RouteExecutor can log and produce the negotiated response.
+        throw $e;
     }
 
     private function negotiateErrorFormat(Request $request, array $route): string

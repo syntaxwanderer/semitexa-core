@@ -22,7 +22,7 @@ final class ContentNegotiator
         }
 
         $method = strtoupper($request->getMethod());
-        if (in_array($method, ['GET', 'HEAD', 'DELETE', 'OPTIONS'], true)) {
+        if (in_array($method, ['GET', 'HEAD', 'OPTIONS'], true)) {
             return true;
         }
 
@@ -84,6 +84,15 @@ final class ContentNegotiator
         foreach ($entries as [$mime, $q]) {
             if ($mime === '*/*' && $produces !== []) {
                 return ContentType::toFormatKey($produces[0]) ?? $defaultFormat;
+            }
+            if (str_ends_with($mime, '/*')) {
+                [$type] = explode('/', $mime, 2);
+                foreach ($produces as $produce) {
+                    if (str_starts_with($produce, $type . '/')) {
+                        return ContentType::toFormatKey($produce) ?? $defaultFormat;
+                    }
+                }
+                continue;
             }
             if (in_array($mime, $produces, true)) {
                 return ContentType::toFormatKey($mime) ?? $defaultFormat;
