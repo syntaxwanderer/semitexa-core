@@ -68,6 +68,7 @@ class Application
 
     /** @var LocaleBootstrapper|null */
     private ?LocaleBootstrapper $localeBootstrapper = null;
+    private ?string $localeStrippedPath = null;
 
     public function __construct(?ContainerInterface $container = null)
     {
@@ -97,6 +98,7 @@ class Application
     public function handleRequest(Request $request): Response
     {
         return self::measure('Application::handleRequest', function() use ($request) {
+            $this->localeStrippedPath = null;
             $runId = 'initial';
             $segmentStart = microtime(true);
             $this->debugLog('H1', 'Application::handleRequest', 'request_received', [
@@ -413,7 +415,7 @@ class Application
 
         // Store stripped path for routing
         if ($resolution !== null && $resolution->strippedPath !== null && $config->urlPrefixEnabled) {
-            $this->requestScopedContainer->set('locale.strippedPath', $resolution->strippedPath);
+            $this->localeStrippedPath = $resolution->strippedPath;
         }
 
         return null;
@@ -421,8 +423,8 @@ class Application
 
     private function getRoutingPath(Request $request): string
     {
-        if ($this->requestScopedContainer->has('locale.strippedPath')) {
-            return $this->requestScopedContainer->get('locale.strippedPath');
+        if ($this->localeStrippedPath !== null) {
+            return $this->localeStrippedPath;
         }
 
         return $request->getPath();
