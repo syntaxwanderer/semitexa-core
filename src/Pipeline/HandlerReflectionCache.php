@@ -49,6 +49,16 @@ final class HandlerReflectionCache
         if (count($params) < 2) {
             throw new \LogicException("{$handlerClass}::handle() must accept at least 2 parameters (payload, resource).");
         }
+        if (count($params) > 2) {
+            for ($i = 2; $i < count($params); $i++) {
+                if (!$params[$i]->isOptional()) {
+                    throw new \LogicException(
+                        "{$handlerClass}::handle() parameter {$i} must be optional. "
+                        . "TypedHandlerInterface handlers only receive 2 parameters (payload, resource)."
+                    );
+                }
+            }
+        }
 
         // Validate parameter 0: must be a concrete class type (not built-in)
         $payloadType = $params[0]->getType();
@@ -67,11 +77,22 @@ final class HandlerReflectionCache
             );
         }
 
-        // Validate return type: must not be Response
+        // Validate return type: must not be Response and should be ResourceInterface
         $returnType = $method->getReturnType();
-        if ($returnType instanceof \ReflectionNamedType && $returnType->getName() === Response::class) {
+        if ($returnType instanceof \ReflectionNamedType) {
+            if ($returnType->getName() === Response::class) {
+                throw new \LogicException(
+                    "{$handlerClass}::handle() must return a ResourceInterface, not a Response object."
+                );
+            }
+            if ($returnType->getName() !== 'object' && !is_a($returnType->getName(), ResourceInterface::class, true)) {
+                throw new \LogicException(
+                    "{$handlerClass}::handle() return type must implement ResourceInterface, got {$returnType->getName()}."
+                );
+            }
+        } elseif ($returnType === null) {
             throw new \LogicException(
-                "{$handlerClass}::handle() must return a ResourceInterface, not a Response object."
+                "{$handlerClass}::handle() must declare a return type implementing ResourceInterface."
             );
         }
 

@@ -63,6 +63,9 @@ final class ContentNegotiator
 
         $acceptHeader = $request->getHeader('Accept');
         if ($acceptHeader === null || $acceptHeader === '' || $acceptHeader === '*/*') {
+            if ($produces !== null && $produces !== []) {
+                return ContentType::toFormatKey($produces[0]) ?? $defaultFormat;
+            }
             return $defaultFormat;
         }
 

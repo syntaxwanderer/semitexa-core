@@ -80,6 +80,14 @@ final class PipelineExecutor
                 ));
             }
 
+            if (!$result instanceof \Semitexa\Core\Contract\ResourceInterface) {
+                throw new \LogicException(sprintf(
+                    'Handler %s must return a ResourceInterface, got %s.',
+                    $instance::class,
+                    gettype($result) . (is_object($result) ? ' (' . $instance::class . ')' : '')
+                ));
+            }
+
             $context->resourceDto = $result;
             return;
         }

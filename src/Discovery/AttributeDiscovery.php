@@ -435,7 +435,15 @@ class AttributeDiscovery
 
                     // Warm reflection cache for TypedHandlerInterface handlers
                     if ($class->implementsInterface(TypedHandlerInterface::class)) {
-                        HandlerReflectionCache::warm($class->getName());
+                        try {
+                            HandlerReflectionCache::warm($class->getName());
+                        } catch (\LogicException $e) {
+                            throw new \LogicException(
+                                "Failed to warm reflection cache for TypedHandlerInterface handler {$class->getName()}: " . $e->getMessage(),
+                                0,
+                                $e
+                            );
+                        }
                     }
                 }
             } catch (\Throwable $e) {
@@ -443,7 +451,6 @@ class AttributeDiscovery
                     error_log("[Semitexa] AttributeDiscovery handler reflection: " . $e->getMessage());
                 }
             }
-        }
 
         self::assertPayloadsHaveDiscoveredRoutes();
 

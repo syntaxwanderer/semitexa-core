@@ -410,7 +410,7 @@ class Application
             if ($qs !== '') {
                 $target .= '?' . $qs;
             }
-            return new Response(301, '', ['Location' => $target]);
+            return new Response('', 301, ['Location' => $target]);
         }
 
         // Store stripped path for routing

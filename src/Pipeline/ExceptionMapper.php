@@ -94,6 +94,12 @@ final class ExceptionMapper
     {
         foreach ($data as $key => $value) {
             $key = is_int($key) ? 'item' : $key;
+            // Sanitize key to be a valid XML element name
+            $key = preg_replace('/[^a-zA-Z_][^a-zA-Z0-9_-]*/', '_', (string) $key);
+            $key = preg_replace('/^[0-9]/', '_', $key);
+            if ($key === '' || ctype_digit($key[0] ?? '')) {
+                $key = '_' . $key;
+            }
             if (is_array($value)) {
                 $child = $xml->addChild($key);
                 $this->arrayToXmlRecursive($value, $child);

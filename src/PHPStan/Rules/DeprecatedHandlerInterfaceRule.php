@@ -36,7 +36,7 @@ final class DeprecatedHandlerInterfaceRule implements Rule
         }
 
         foreach ($node->implements as $implement) {
-            $implementedName = $implement->toString();
+            $implementedName = $scope->resolveName($implement);
 
             if ($implementedName === self::DEPRECATED_INTERFACE) {
                 return [

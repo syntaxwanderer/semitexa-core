@@ -160,7 +160,8 @@ class RouteExecutor
     {
         // Redirect short-circuit: if the resource has a redirect URL, skip rendering
         if (method_exists($resDto, 'getRedirectUrl') && $resDto->getRedirectUrl() !== null) {
-            return Response::redirect($resDto->getRedirectUrl(), $resDto->getStatusCode());
+            $statusCode = method_exists($resDto, 'getStatusCode') ? $resDto->getStatusCode() : 302;
+            return Response::redirect($resDto->getRedirectUrl(), $statusCode);
         }
 
         $handle = method_exists($resDto, 'getRenderHandle') ? $resDto->getRenderHandle() : null;
@@ -178,9 +179,9 @@ class RouteExecutor
         }
         $rendererClass = method_exists($resDto, 'getRendererClass') ? $resDto->getRendererClass() : null;
 
-        // Negotiate format when produces is set on the route
+        // Negotiate format when produces is set on the route and we have a render handle
         $produces = $route['produces'] ?? null;
-        if ($produces !== null && $produces !== []) {
+        if ($handle && $produces !== null && $produces !== []) {
             try {
                 $defaultKey = $format !== null ? self::formatEnumToKey($format) : 'json';
                 $negotiatedKey = ContentNegotiator::negotiateResponseFormat($produces, $request, $defaultKey);
