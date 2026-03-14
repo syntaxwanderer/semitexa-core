@@ -343,7 +343,7 @@ class InitCommand extends Command
             . "# Or: bin/semitexa server:start (uses this file automatically when DB_DRIVER is set).\n"
             . "services:\n  app:\n    environment:\n      DB_HOST: mysql\n      DB_PORT: \"3306\"\n    depends_on:\n      mysql:\n        condition: service_healthy\n"
             . "\n  mysql:\n    image: mysql:8.4\n    restart: unless-stopped\n    environment:\n      MYSQL_ROOT_PASSWORD: \${DB_PASSWORD:-root}\n      MYSQL_DATABASE: \${DB_DATABASE:-semitexa}\n"
-            . "    ports:\n      - \"\${DB_PORT:-3307}:3306\"\n    volumes:\n      - mysql_data:/var/lib/mysql\n"
+            . "    volumes:\n      - mysql_data:/var/lib/mysql\n"
             . "    healthcheck:\n      test: [\"CMD\", \"mysqladmin\", \"ping\", \"-h\", \"localhost\"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n      start_period: 30s\n"
             . "\nvolumes:\n  mysql_data:\n";
     }
