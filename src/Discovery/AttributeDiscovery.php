@@ -451,6 +451,7 @@ class AttributeDiscovery
                     error_log("[Semitexa] AttributeDiscovery handler reflection: " . $e->getMessage());
                 }
             }
+        }
 
         self::assertPayloadsHaveDiscoveredRoutes();
 
