@@ -237,7 +237,9 @@ class RouteExecutor
             $declaredTemplate = $resDto->getDeclaredTemplate();
             if ($declaredTemplate !== null && method_exists($resDto, 'renderTemplate')) {
                 $resDto->renderTemplate($declaredTemplate);
-                $existingContent = $resDto->getContent();
+                if (method_exists($resDto, 'getContent')) {
+                    $existingContent = $resDto->getContent();
+                }
             }
         }
 
