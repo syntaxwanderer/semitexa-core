@@ -375,6 +375,18 @@ class AttributeDiscovery
                 }
             }
 
+            // Framework-reserved path validation
+            $reservedPaths = ['/__semitexa_kiss', '/__semitexa_hug', '/__semitexa_sse'];
+            $normalizedPath = rtrim($resolved['path'], '/');
+            if (in_array($normalizedPath, $reservedPaths, true)
+                && !str_starts_with($class, 'Semitexa\\Ssr\\')
+                && !str_starts_with($class, 'Semitexa\\Core\\')
+            ) {
+                throw new \Semitexa\Core\Exception\ConflictException(
+                    "Route path '{$resolved['path']}' is reserved by the Semitexa framework and cannot be claimed by non-framework class {$class}."
+                );
+            }
+
             self::$routes[] = [
                 'path' => $resolved['path'],
                 'methods' => $resolved['methods'],
@@ -461,10 +473,10 @@ class AttributeDiscovery
 
         // Discover layout slot contributions (optional)
         if (
-            class_exists('Semitexa\\Frontend\\Attributes\\AsLayoutSlot')
-            && class_exists('Semitexa\\Frontend\\Layout\\LayoutSlotRegistry')
+            class_exists('Semitexa\\Ssr\\Attributes\\AsLayoutSlot')
+            && class_exists('Semitexa\\Ssr\\Layout\\LayoutSlotRegistry')
         ) {
-            $slotAttribute = 'Semitexa\\Frontend\\Attributes\\AsLayoutSlot';
+            $slotAttribute = 'Semitexa\\Ssr\\Attributes\\AsLayoutSlot';
             $slotClasses = ClassDiscovery::findClassesWithAttribute($slotAttribute);
             foreach ($slotClasses as $className) {
                 try {
@@ -483,12 +495,51 @@ class AttributeDiscovery
                             $slot,
                             $template,
                             is_array($context) ? $context : [],
-                            $priority
+                            $priority,
+                            $meta->deferred ?? false,
+                            $meta->cacheTtl ?? 0,
+                            $meta->dataProvider ?? null,
+                            $meta->skeletonTemplate ?? null,
+                            $meta->mode ?? 'html',
                         );
                     }
                 } catch (\Throwable $e) {
                     if (Environment::getEnvValue('APP_DEBUG') === '1') {
                         error_log("[Semitexa] AttributeDiscovery layout slot: " . $e->getMessage());
+                    }
+                }
+            }
+        }
+
+        // Discover DataProvider registrations (optional)
+        if (
+            class_exists('Semitexa\\Ssr\\Attributes\\AsDataProvider')
+            && class_exists('Semitexa\\Ssr\\Application\\Service\\DataProviderRegistry')
+        ) {
+            $dpAttribute = 'Semitexa\\Ssr\\Attributes\\AsDataProvider';
+            $dpClasses = array_values(array_filter(
+                ClassDiscovery::findClassesWithAttribute($dpAttribute),
+                fn (string $class) => self::isModuleActiveForClass($class) || self::isProjectResource($class)
+            ));
+            foreach ($dpClasses as $className) {
+                try {
+                    $class = new \ReflectionClass($className);
+                    $attrs = $class->getAttributes($dpAttribute);
+                    foreach ($attrs as $attr) {
+                        $meta = $attr->newInstance();
+                        if (!property_exists($meta, 'slot') || $meta->slot === null || $meta->slot === '') {
+                            throw new \RuntimeException("AsDataProvider on {$className} is missing slot.");
+                        }
+                        $handles = property_exists($meta, 'handles') && is_array($meta->handles) ? $meta->handles : [];
+                        \Semitexa\Ssr\Application\Service\DataProviderRegistry::register(
+                            $meta->slot,
+                            $className,
+                            $handles,
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                        error_log("[Semitexa] AttributeDiscovery data provider: " . $e->getMessage());
                     }
                 }
             }
@@ -580,6 +631,7 @@ class AttributeDiscovery
                         'handle' => $attr->handle !== null ? EnvValueResolver::resolve($attr->handle) : null,
                         'format' => $attr->format,
                         'renderer' => $attr->renderer !== null ? EnvValueResolver::resolve($attr->renderer) : null,
+                        'template' => $attr->template !== null ? EnvValueResolver::resolve($attr->template) : null,
                         'context' => $attr->context ?? [],
                         'base' => $attr->base !== null && $attr->base !== '' ? ltrim($attr->base, '\\') : null,
                         'produces' => $attr->produces,
@@ -641,8 +693,11 @@ class AttributeDiscovery
     private static function mergeResponseAttributes(array $base, array $override): array
     {
         $result = $base;
-        foreach (['handle', 'format', 'renderer', 'context', 'produces'] as $key) {
-            if ($override[$key] !== null && $override[$key] !== []) {
+        foreach (['handle', 'format', 'renderer', 'template', 'context', 'produces'] as $key) {
+            if (!\array_key_exists($key, $override)) {
+                continue;
+            }
+            if ($override[$key] !== null) {
                 $result[$key] = $override[$key];
             }
         }
@@ -656,7 +711,8 @@ class AttributeDiscovery
             'handle' => $handle,
             'format' => $attr['format'] ?? null,
             'renderer' => $attr['renderer'] ?? null,
-            'context' => $attr['context'] ?? [],
+            'template' => $attr['template'] ?? null,
+            'context' => \array_key_exists('context', $attr) ? $attr['context'] : null,
             'produces' => $attr['produces'] ?? null,
         ];
     }
@@ -744,7 +800,7 @@ class AttributeDiscovery
             return 300;
         }
 
-        if (str_contains($file, '/packages/') || str_contains($file, '/pakages/')) {
+        if (str_contains($file, '/packages/')) {
             return 200;
         }
 
