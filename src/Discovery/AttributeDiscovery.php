@@ -375,6 +375,18 @@ class AttributeDiscovery
                 }
             }
 
+            // Framework-reserved path validation
+            $reservedPaths = ['/__semitexa_kiss', '/__semitexa_hug', '/__semitexa_sse'];
+            $normalizedPath = rtrim($resolved['path'], '/');
+            if (in_array($normalizedPath, $reservedPaths, true)
+                && !str_starts_with($class, 'Semitexa\\Ssr\\')
+                && !str_starts_with($class, 'Semitexa\\Core\\')
+            ) {
+                throw new \Semitexa\Core\Exception\ConflictException(
+                    "Route path '{$resolved['path']}' is reserved by the Semitexa framework and cannot be claimed by module class {$class}."
+                );
+            }
+
             self::$routes[] = [
                 'path' => $resolved['path'],
                 'methods' => $resolved['methods'],
@@ -479,16 +491,48 @@ class AttributeDiscovery
                         $context = EnvValueResolver::resolve($meta->context);
                         $priority = $meta->priority;
                         \Semitexa\Ssr\Layout\LayoutSlotRegistry::register(
-                            $handle,
-                            $slot,
-                            $template,
-                            is_array($context) ? $context : [],
-                            $priority
+                            handle: $handle,
+                            slot: $slot,
+                            template: $template,
+                            context: is_array($context) ? $context : [],
+                            priority: $priority,
+                            deferred: $meta->deferred ?? false,
+                            cacheTtl: $meta->cacheTtl ?? 0,
+                            dataProvider: $meta->dataProvider ?? null,
+                            skeletonTemplate: $meta->skeletonTemplate ?? null,
+                            mode: $meta->mode ?? 'html',
                         );
                     }
                 } catch (\Throwable $e) {
                     if (Environment::getEnvValue('APP_DEBUG') === '1') {
                         error_log("[Semitexa] AttributeDiscovery layout slot: " . $e->getMessage());
+                    }
+                }
+            }
+        }
+
+        // Discover DataProvider registrations (optional)
+        if (
+            class_exists('Semitexa\\Ssr\\Attributes\\AsDataProvider')
+            && class_exists('Semitexa\\Ssr\\Application\\Service\\DataProviderRegistry')
+        ) {
+            $dpAttribute = 'Semitexa\\Ssr\\Attributes\\AsDataProvider';
+            $dpClasses = ClassDiscovery::findClassesWithAttribute($dpAttribute);
+            foreach ($dpClasses as $className) {
+                try {
+                    $class = new \ReflectionClass($className);
+                    $attrs = $class->getAttributes($dpAttribute);
+                    foreach ($attrs as $attr) {
+                        $meta = $attr->newInstance();
+                        \Semitexa\Ssr\Application\Service\DataProviderRegistry::register(
+                            $meta->slot,
+                            $className,
+                            $meta->handles,
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                        error_log("[Semitexa] AttributeDiscovery data provider: " . $e->getMessage());
                     }
                 }
             }
