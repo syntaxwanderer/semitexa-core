@@ -383,7 +383,7 @@ class AttributeDiscovery
                 && !str_starts_with($class, 'Semitexa\\Core\\')
             ) {
                 throw new \Semitexa\Core\Exception\ConflictException(
-                    "Route path '{$resolved['path']}' is reserved by the Semitexa framework and cannot be claimed by module class {$class}."
+                    "Route path '{$resolved['path']}' is reserved by the Semitexa framework and cannot be claimed by non-framework class {$class}."
                 );
             }
 
