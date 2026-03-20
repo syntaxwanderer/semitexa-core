@@ -53,7 +53,6 @@ Project-level docs live in `docs/`. Package-level deep reference lives in `vendo
 
 | Topic | File or folder |
 |-------|----------------|
-| **Project docs hub** — navigation for this app/project | [docs/README.md](docs/README.md) |
 | **AI context for this project** | [docs/AI_CONTEXT.md](docs/AI_CONTEXT.md) |
 | **Running the app** — Docker, ports, logs | [vendor/semitexa/core/docs/RUNNING.md](vendor/semitexa/core/docs/RUNNING.md) |
 | **Adding pages and routes** — modules, Request/Handler | [vendor/semitexa/core/docs/ADDING_ROUTES.md](vendor/semitexa/core/docs/ADDING_ROUTES.md) |
