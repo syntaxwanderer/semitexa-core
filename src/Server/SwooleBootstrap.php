@@ -74,12 +74,13 @@ class SwooleBootstrap
         $pendingDeliverTable->column('payload', Table::TYPE_STRING, $env->swooleSsePayloadMaxBytes);
         $pendingDeliverTable->create();
 
-        // Isomorphic SSR deferred-request registry — must be created pre-fork so all
-        // workers share the same mmap-backed Table (page context keyed by request ID).
+        // Isomorphic SSR deferred-request registry. Newer SSR builds support a pre-fork
+        // shared table; older released builds only expose initialize() and create the
+        // table per worker. Keep startup backward-compatible with both APIs.
         $deferredRequestTable = null;
         if (class_exists(\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::class)) {
             $isomorphicConfig = \Semitexa\Ssr\Configuration\IsomorphicConfig::fromEnvironment();
-            if ($isomorphicConfig->enabled) {
+            if ($isomorphicConfig->enabled && method_exists(\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::class, 'createSharedTable')) {
                 $deferredRequestTable = \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::createSharedTable($isomorphicConfig);
             }
         }
@@ -102,10 +103,16 @@ class SwooleBootstrap
                 \Semitexa\Ssr\Async\AsyncResourceSseServer::setServer($server);
                 \Semitexa\Ssr\Async\AsyncResourceSseServer::setTables($sessionWorkerTable, $deliverTable, $pendingDeliverTable);
             }
-            // Inject the pre-fork shared table so every worker can read deferred request
-            // context written by any other worker, then start the per-worker GC timer.
-            if ($deferredRequestTable !== null && class_exists(\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::class)) {
+            // Inject the shared table when the SSR package supports it, otherwise fall
+            // back to the legacy initialize()-only path to avoid startup fatals.
+            if (
+                $deferredRequestTable !== null
+                && class_exists(\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::class)
+                && method_exists(\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::class, 'setTable')
+            ) {
                 \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::setTable($deferredRequestTable);
+            }
+            if (class_exists(\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::class)) {
                 \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::initialize();
             }
             // Register the 'ssr' asset alias and publish template files in every worker
