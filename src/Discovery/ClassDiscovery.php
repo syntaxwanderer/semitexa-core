@@ -136,20 +136,13 @@ class ClassDiscovery
         uksort($psr4Map, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
 
         $seenRealPaths = [];
-        foreach (self::$classMap as $filePath) {
-            $realPath = realpath($filePath);
-            if ($realPath !== false) {
-                $seenRealPaths[$realPath] = true;
-            }
-        }
-
         foreach ($psr4Map as $namespace => $dirs) {
             if (!self::isNamespaceAllowed($namespace)) {
                 continue;
             }
 
             foreach ((array) $dirs as $dir) {
-                if (!is_dir($dir)) {
+                if (!self::shouldMergePsr4Directory($dir)) {
                     continue;
                 }
 
@@ -159,11 +152,6 @@ class ClassDiscovery
 
                 foreach ($iterator as $fileInfo) {
                     if (!$fileInfo instanceof \SplFileInfo || !$fileInfo->isFile() || $fileInfo->getExtension() !== 'php') {
-                        continue;
-                    }
-
-                    $relativePath = substr($fileInfo->getPathname(), strlen($dir) + 1);
-                    if ($relativePath === false) {
                         continue;
                     }
 
@@ -186,6 +174,32 @@ class ClassDiscovery
                 }
             }
         }
+    }
+
+    private static function shouldMergePsr4Directory(string $dir): bool
+    {
+        if (!is_dir($dir)) {
+            return false;
+        }
+
+        $projectRoot = ProjectRoot::get();
+        $vendorRoot = $projectRoot . '/vendor/';
+        $realPath = realpath($dir);
+        if ($realPath === false) {
+            return false;
+        }
+
+        // Keep fallback scanning limited to live project code and path repositories
+        // (e.g. vendor symlinks into packages/*). Regular vendor packages should rely
+        // on Composer's classmap and avoid a full filesystem walk on every bootstrap.
+        if (str_starts_with($realPath, $projectRoot . '/src/')
+            || str_starts_with($realPath, $projectRoot . '/tests/')
+            || str_starts_with($realPath, $projectRoot . '/packages/')
+        ) {
+            return true;
+        }
+
+        return str_starts_with($dir, $vendorRoot) && !str_starts_with($realPath, $vendorRoot);
     }
 
     private static function extractDeclaredClassName(string $filePath): ?string
