@@ -168,7 +168,13 @@ class LintTemplatesCommand extends BaseCommand
 
     private function relativePath(string $path, string $root): string
     {
-        return str_starts_with($path, $root) ? substr($path, strlen($root) + 1) : $path;
+        $root = rtrim($root, '/\\');
+        if ($path === $root) {
+            return '.';
+        }
+
+        $prefix = $root . DIRECTORY_SEPARATOR;
+        return str_starts_with($path, $prefix) ? substr($path, strlen($prefix)) : $path;
     }
 
     /** @param array<int, array{module: string, path: string, message: string}> $errors
@@ -217,7 +223,21 @@ class LintTemplatesCommand extends BaseCommand
             'clean'    => count($errors) === 0 && count($warnings) === 0,
         ];
 
-        $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-        $output->writeln($json !== false ? $json : '{}');
+        $json = json_encode(
+            $data,
+            JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+
+        if ($json === false) {
+            $fallback = [
+                'clean' => false,
+                'errors' => $errors,
+                'warnings' => $warnings,
+                'json_error' => json_last_error_msg(),
+            ];
+            $json = json_encode($fallback, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
+        }
+
+        $output->writeln($json !== false ? $json : '{"clean":false,"errors":[],"warnings":[],"json_error":"Failed to encode lint output"}');
     }
 }

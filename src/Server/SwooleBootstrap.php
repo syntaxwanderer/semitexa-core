@@ -91,9 +91,6 @@ class SwooleBootstrap
 
         $server->on('WorkerStart', function (Server $server, int $workerId) use ($sessionWorkerTable, $deliverTable, $pendingDeliverTable, $deferredRequestTable) {
             Environment::syncEnvFromFiles();
-            // Refresh the Composer autoloader classmap so any packages added since the master
-            // process started (e.g. after composer update + graceful reload) are auto-loadable.
-            self::refreshComposerClassMap();
             ContainerFactory::create();
             ModuleAssetRegistry::initialize();
             if (class_exists(\Semitexa\Ssr\Asset\AssetCollector::class)) {
