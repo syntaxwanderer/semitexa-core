@@ -26,6 +26,7 @@ class ClassDiscovery
 
         $composerDir = ProjectRoot::get() . '/vendor/composer';
         $composerClassMap = require $composerDir . '/autoload_classmap.php';
+        $composerPsr4Map = require $composerDir . '/autoload_psr4.php';
 
         // Refresh the Composer ClassLoader with the current classmap and PSR-4 namespaces.
         // Needed after graceful Swoole reload: workers inherit the master's stale ClassLoader,
@@ -37,6 +38,8 @@ class ClassDiscovery
                 self::$classMap[$className] = $filePath;
             }
         }
+
+        self::mergePsr4ClassCandidates($composerPsr4Map);
 
         self::$initialized = true;
     }
@@ -119,6 +122,132 @@ class ClassDiscovery
         } catch (\Throwable) {
             // Autoloader refresh is best-effort; never block initialization.
         }
+    }
+
+    /**
+     * Composer's generated classmap can lag behind local PSR-4 edits until
+     * dump-autoload runs. Merge PSR-4-derived class candidates so attribute
+     * discovery sees newly-added or renamed classes immediately.
+     *
+     * @param array<string, list<string>|string> $psr4Map
+     */
+    private static function mergePsr4ClassCandidates(array $psr4Map): void
+    {
+        uksort($psr4Map, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
+
+        $seenRealPaths = [];
+        foreach ($psr4Map as $namespace => $dirs) {
+            if (!self::isNamespaceAllowed($namespace)) {
+                continue;
+            }
+
+            foreach ((array) $dirs as $dir) {
+                if (!self::shouldMergePsr4Directory($dir)) {
+                    continue;
+                }
+
+                $iterator = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                );
+
+                foreach ($iterator as $fileInfo) {
+                    if (!$fileInfo instanceof \SplFileInfo || !$fileInfo->isFile() || $fileInfo->getExtension() !== 'php') {
+                        continue;
+                    }
+
+                    $realPath = $fileInfo->getRealPath();
+                    if ($realPath !== false && isset($seenRealPaths[$realPath])) {
+                        continue;
+                    }
+
+                    $className = self::extractDeclaredClassName($fileInfo->getPathname());
+                    if ($className === null || !self::isNamespaceAllowed($className)) {
+                        continue;
+                    }
+
+                    if (!isset(self::$classMap[$className])) {
+                        self::$classMap[$className] = $fileInfo->getPathname();
+                        if ($realPath !== false) {
+                            $seenRealPaths[$realPath] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static function shouldMergePsr4Directory(string $dir): bool
+    {
+        if (!is_dir($dir)) {
+            return false;
+        }
+
+        $projectRoot = ProjectRoot::get();
+        $vendorRoot = $projectRoot . '/vendor/';
+        $realPath = realpath($dir);
+        if ($realPath === false) {
+            return false;
+        }
+
+        // Keep fallback scanning limited to live project code and path repositories
+        // (e.g. vendor symlinks into packages/*). Regular vendor packages should rely
+        // on Composer's classmap and avoid a full filesystem walk on every bootstrap.
+        if (str_starts_with($realPath, $projectRoot . '/src/')
+            || str_starts_with($realPath, $projectRoot . '/tests/')
+            || str_starts_with($realPath, $projectRoot . '/packages/')
+        ) {
+            return true;
+        }
+
+        return str_starts_with($dir, $vendorRoot) && !str_starts_with($realPath, $vendorRoot);
+    }
+
+    private static function extractDeclaredClassName(string $filePath): ?string
+    {
+        $source = @file_get_contents($filePath);
+        if ($source === false) {
+            return null;
+        }
+
+        $tokens = token_get_all($source);
+        $namespace = '';
+        $collectNamespace = false;
+        $collectClass = false;
+
+        foreach ($tokens as $token) {
+            if (!is_array($token)) {
+                if ($collectNamespace && ($token === ';' || $token === '{')) {
+                    $collectNamespace = false;
+                }
+                continue;
+            }
+
+            [$id, $text] = $token;
+
+            if ($id === T_NAMESPACE) {
+                $namespace = '';
+                $collectNamespace = true;
+                continue;
+            }
+
+            if ($collectNamespace) {
+                if ($id === T_STRING || $id === T_NAME_QUALIFIED || $id === T_NS_SEPARATOR) {
+                    $namespace .= $text;
+                }
+                continue;
+            }
+
+            if ($id === T_CLASS || $id === T_INTERFACE || $id === T_TRAIT || $id === T_ENUM) {
+                $collectClass = true;
+                continue;
+            }
+
+            if ($collectClass && $id === T_STRING) {
+                return $namespace !== '' ? $namespace . '\\' . $text : $text;
+            }
+        }
+
+        return null;
     }
 
     private static function isNamespaceAllowed(string $className): bool
