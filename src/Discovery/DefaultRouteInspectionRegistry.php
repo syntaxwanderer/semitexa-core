@@ -37,7 +37,7 @@ final class DefaultRouteInspectionRegistry implements RouteInspectionRegistryInt
         AttributeDiscovery::initialize();
 
         $resolved = [];
-        foreach (AttributeDiscovery::getRoutes() as $route) {
+        foreach (AttributeDiscovery::getEnrichedRoutes() as $route) {
             $resolved[] = $this->metadataResolver->resolve($route);
         }
 

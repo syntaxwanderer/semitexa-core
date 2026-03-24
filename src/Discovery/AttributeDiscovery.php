@@ -83,6 +83,16 @@ class AttributeDiscovery
     }
 
     /**
+     * Get all discovered routes with responseClass and handlers populated.
+     *
+     * @return list<array>
+     */
+    public static function getEnrichedRoutes(): array
+    {
+        return array_map(static fn(array $route) => self::enrichRoute($route), self::$routes);
+    }
+
+    /**
      * Class names of all handlers discovered via #[AsPayloadHandler].
      * Used by the container to resolve handler instances (handlers are not service contracts).
      *

@@ -38,10 +38,13 @@ class RouteExecutor
      */
     public function execute(array $route, Request $request): Response
     {
-        $metadata = $this->resolveRouteMetadata($route);
-        $exceptionMapper = $this->resolveExceptionMapper();
+        $metadata = null;
+        $exceptionMapper = null;
 
         try {
+            $metadata = $this->resolveRouteMetadata($route);
+            $exceptionMapper = $this->resolveExceptionMapper();
+
             // 0. Reject unsupported Content-Type early
             $consumesResult = ContentNegotiator::checkConsumes(
                 $metadata->consumes,
@@ -89,9 +92,10 @@ class RouteExecutor
             // Let NotFoundException bubble up so Application::handleRouteException()
             // can dispatch the custom error.404 route when registered.
             throw $e;
-        } catch (DomainException $e) {
-            return $this->decorateResponse($exceptionMapper->map($e, $request, $metadata), $request, $metadata);
-        } catch (\Throwable $e) {
+        } catch (DomainException|\Throwable $e) {
+            if ($exceptionMapper === null || $metadata === null) {
+                throw $e;
+            }
             return $this->decorateResponse($exceptionMapper->map($e, $request, $metadata), $request, $metadata);
         }
     }

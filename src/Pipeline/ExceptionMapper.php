@@ -63,10 +63,12 @@ final class ExceptionMapper implements ExceptionResponseMapperInterface
         return $response;
     }
 
-    private function mapUnknownException(\Throwable $e): never
+    private function mapUnknownException(\Throwable $e): Response
     {
-        // Rethrow so Application/RouteExecutor can log and produce the negotiated response.
-        throw $e;
+        return Response::json([
+            'error' => 'Internal Server Error',
+            'message' => 'An unexpected error occurred.',
+        ], HttpStatus::InternalServerError->value);
     }
 
     private function negotiateErrorFormat(Request $request, ?array $produces): string
