@@ -26,7 +26,7 @@ Project-specific guidance lives in `docs/`. Detailed framework reference stays i
 ## 🛠 Common Tasks
 
 ### Adding a New Page/Endpoint
-0.  **Check generators first**: before creating `Payload`, `Handler`, `Response`, or template scaffolding manually, run `bin/semitexa ai:capabilities --json`. If a matching generator exists, prefer the generator and then use `--llm-hints` for the remaining domain logic.
+0.  **Check generators first**: before creating `Payload`, `Handler`, `Response`, or template scaffolding manually, run `bin/semitexa ai:capabilities --json`. If a matching generator exists, prefer the generator and then use `--llm-hints` **when available** for the remaining domain logic.
 1.  **Create Module**: `src/modules/MyFeature/` + `composer.json` (`type: semitexa-module`).
 2.  **Request DTO**: Create `Application/Payload/Request/MyPagePayload.php` with `#[AsPayload(path, methods, responseWith)]`. See **docs/MODULE_STRUCTURE.md** (Payload/Request, Session, Event; Handlers by type).
 3.  **Handler**: Create `Application/Handler/PayloadHandler/MyPageHandler.php` with `#[AsPayloadHandler(payload: ..., resource: ...)]`.
