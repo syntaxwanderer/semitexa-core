@@ -176,7 +176,6 @@ class AttributeDiscovery
     
     /**
      * Enrich route with handlers and response class.
-     * Prefer handlers matched by (payload, resource); fallback to legacy handlers by payload only.
      */
     private static function enrichRoute(array $route): array
     {
@@ -954,77 +953,6 @@ class AttributeDiscovery
         return $pos === false ? $class : substr($class, $pos + 1);
     }
     
-    /**
-     * Scan all PHP files in discovered modules (legacy method)
-     */
-    private static function scanAllAttributes(): void
-    {
-        $modules = ModuleRegistry::getModules();
-        
-        foreach ($modules as $module) {
-            
-            $files = self::getAllPhpFiles($module['path']);
-            
-            // Legacy scanAllAttributes method is no longer used
-            // All discovery is done via ClassDiscovery in scanAttributesIntelligently()
-        }
-    }
-    
-    /**
-     * Get all PHP files recursively
-     */
-    private static function getAllPhpFiles(string $directory): array
-    {
-        $files = [];
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory)
-        );
-        
-        foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getExtension() === 'php') {
-                $files[] = $file->getPathname();
-            }
-        }
-        
-        return $files;
-    }
-    
-    /**
-     * Load class from file
-     */
-    private static function loadClassFromFile(string $file): ?ReflectionClass
-    {
-        // Skip vendor files
-        if (strpos($file, '/vendor/') !== false) {
-            return null;
-        }
-        
-        // Extract namespace and class name from file
-        $content = file_get_contents($file);
-        
-        if (!preg_match('/namespace\s+([^;]+);/', $content, $namespaceMatches)) {
-            return null;
-        }
-        
-        if (!preg_match('/class\s+(\w+)/', $content, $classMatches)) {
-            return null;
-        }
-        
-        $fullClassName = $namespaceMatches[1] . '\\' . $classMatches[1];
-        
-        // Load the file if class doesn't exist
-        if (!class_exists($fullClassName)) {
-            require_once $file;
-        }
-        
-        // Check if class exists after loading
-        if (!class_exists($fullClassName)) {
-            return null;
-        }
-        
-        return new ReflectionClass($fullClassName);
-    }
-
     /**
      * Discover traits marked with #[AsPayloadPart] from active modules.
      */
