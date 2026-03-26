@@ -563,17 +563,6 @@ final class SemitexaContainer implements ContainerInterface
                         $args[] = $inst;
                         continue;
                     }
-                    if (!$param->isDefaultValueAvailable() && !$param->allowsNull()) {
-                        // Registered interface/class not yet built — build it lazily now.
-                        $targetClass = $this->idToClass[$name] ?? (class_exists($name, false) && !interface_exists($name, false) ? $name : null);
-                        if ($targetClass !== null) {
-                            $inst = $this->createInstance($targetClass, $contractDetails, $readonly);
-                            $this->readonlyInstances[$targetClass] = $inst;
-                            $this->readonlyInstances[$name] = $inst;
-                            $args[] = $inst;
-                            continue;
-                        }
-                    }
                 }
                 if ($param->isDefaultValueAvailable()) {
                     $args[] = $param->getDefaultValue();

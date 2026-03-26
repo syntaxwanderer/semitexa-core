@@ -484,8 +484,11 @@ class ModuleRegistry
 
     private static function buildNamespaceFromVendor(string $vendor, string $package): string
     {
-        return Str::toStudly($vendor) . '\\' . Str::toStudly($package);
-    }
+        $packageNamespace = Str::toStudly($package);
+        if ($vendor === '') {
+            return $packageNamespace;
+        }
 
-    
+        return Str::toStudly($vendor) . '\\' . $packageNamespace;
+    }
 }

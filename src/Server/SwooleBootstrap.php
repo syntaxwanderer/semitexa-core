@@ -23,8 +23,6 @@ use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Http\Server;
 use Swoole\Table;
-use Throwable;
-
 class SwooleBootstrap
 {
     private const COROUTINE_CONTEXT_KEY = '__semitexa_swoole_ctx';

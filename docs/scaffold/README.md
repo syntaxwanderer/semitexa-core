@@ -15,7 +15,7 @@ When you run **`bin/semitexa init`** or **`bin/semitexa init --only-docs --force
 
 The scaffold sources for the project documentation entry points are:
 
-- [README.md](../../../semitexa-ultimate/README.md)
-- [docs/AI_CONTEXT.md](../../../semitexa-ultimate/docs/AI_CONTEXT.md)
+- [README.md](https://github.com/semitexa/semitexa-ultimate/blob/main/README.md)
+- [docs/AI_CONTEXT.md](https://github.com/semitexa/semitexa-ultimate/blob/main/docs/AI_CONTEXT.md)
 
 This folder keeps reference copies for scaffold-related docs.

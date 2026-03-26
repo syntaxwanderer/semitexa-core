@@ -54,11 +54,11 @@ class AsPayload
         public ?array $tags = null,
         public ?bool $public = null,
         public string $protocol = 'http',
+        public ?string $responseWith = null,
         /** @var list<string>|null Request Content-Types this endpoint accepts. null = all. */
         public ?array $consumes = null,
         /** @var list<string>|null Response Content-Types this endpoint can produce. null = all. */
         public ?array $produces = null,
-        public ?string $responseWith = null,
     ) {
         $this->doc = $doc;
         if ($this->consumes !== null) {
