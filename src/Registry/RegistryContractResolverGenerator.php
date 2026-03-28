@@ -14,7 +14,7 @@ use Semitexa\Core\Util\ProjectRoot;
  *
  * When a "Factory" interface exists (same namespace, name starts with "Factory",
  * e.g. FactoryItemListProviderInterface for ItemListProviderInterface), generates
- * a factory class that implements it and allows choosing an implementation by key (module name).
+ * a factory class that implements it and allows choosing an implementation by enum key.
  */
 class RegistryContractResolverGenerator
 {
@@ -171,7 +171,7 @@ namespace App\Registry\Contracts;
 
 /**
  * AUTO-GENERATED. Regenerate via: bin/semitexa registry:sync:contracts
- * Factory for {$baseInterface}. Implements {$factoryInterface}. Keys: Module::ShortClassName (case-insensitive in get()).
+ * Factory for {$baseInterface}. Implements {$factoryInterface}. Enum-keyed and closed-world.
  */
 final class {$factoryShortName} implements {$factoryInterfaceTypeHint}
 {
@@ -191,15 +191,13 @@ final class {$factoryShortName} implements {$factoryInterfaceTypeHint}
         return \$this->resolver->getContract();
     }
 
-    public function get(string \$key): {$baseInterfaceTypeHint}
+    public function get(\BackedEnum \$key): {$baseInterfaceTypeHint}
     {
-        \$keyLower = strtolower(\$key);
-        foreach (\$this->byKey as \$k => \$impl) {
-            if (strtolower(\$k) === \$keyLower) {
-                return \$impl;
-            }
+        \$lookup = (string) \$key->value;
+        if (isset(\$this->byKey[\$lookup])) {
+            return \$this->byKey[\$lookup];
         }
-        throw new \InvalidArgumentException('Unknown implementation key: ' . \$key . '. Available: ' . implode(', ', array_keys(\$this->byKey)));
+        throw new \InvalidArgumentException('Unknown implementation key: ' . \$key::class . '::' . \$key->name);
     }
 
     /** @return list<string> */

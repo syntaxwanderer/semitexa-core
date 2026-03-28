@@ -13,6 +13,8 @@ use Semitexa\Core\Support\DtoSerializer;
 /**
  * Single entry point for events: create() builds the event instance (framework-controlled),
  * dispatch() runs all listeners (sync or async via the same queue as payload handlers).
+ *
+ * @internal Uses ContainerFactory::get() — this is core framework plumbing, not application code.
  */
 #[SatisfiesServiceContract(of: EventDispatcherInterface::class)]
 final class EventDispatcher implements EventDispatcherInterface
@@ -55,25 +57,18 @@ final class EventDispatcher implements EventDispatcherInterface
     {
         /** @var \Semitexa\Core\Container\SemitexaContainer $container */
         $container = ContainerFactory::get();
-        try {
-            if ($container->has($meta['class'])) {
-                $listener = $container->get($meta['class']);
-            } else {
-                $listener = $container->resolve($meta['class']);
-            }
-        } catch (\Throwable $e) {
-            // Listener has unresolvable dependencies (e.g. interface not yet implemented) — skip gracefully
-            if (function_exists('error_log')) {
-                error_log(sprintf(
-                    'Semitexa EventDispatcher: skipping listener "%s" — %s',
-                    $meta['class'],
-                    $e->getMessage()
-                ));
-            }
-            return;
+
+        if ($container->has($meta['class'])) {
+            $listener = $container->get($meta['class']);
+        } else {
+            $listener = $container->resolve($meta['class']);
         }
+
         if (!method_exists($listener, 'handle')) {
-            return;
+            throw new \LogicException(sprintf(
+                'Event listener %s must have a handle() method.',
+                $meta['class'],
+            ));
         }
         $listener->handle($event);
     }
@@ -101,20 +96,7 @@ final class EventDispatcher implements EventDispatcherInterface
             eventPayload: DtoSerializer::toArray($event),
         );
 
-        try {
-            $transport = QueueTransportRegistry::create($transportName);
-            $transport->publish($queueName, $message->toJson());
-        } catch (\Throwable $e) {
-            // Queue unavailable (e.g. RabbitMQ not running): run listener synchronously so the request still succeeds
-            if (function_exists('error_log')) {
-                error_log(sprintf(
-                    'Semitexa EventDispatcher: queue "%s" unavailable (%s). Running listener "%s" synchronously.',
-                    $transportName,
-                    $e->getMessage(),
-                    $meta['class'] ?? 'unknown'
-                ));
-            }
-            $this->runListenerSync($meta, $event);
-        }
+        $transport = QueueTransportRegistry::create($transportName);
+        $transport->publish($queueName, $message->toJson());
     }
 }
