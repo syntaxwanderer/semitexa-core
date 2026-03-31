@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Support;
 
+use Semitexa\Tenancy\Context\CoroutineContextStore;
+
 final class TenantModuleScopeResolver
 {
     /**
@@ -35,11 +37,19 @@ final class TenantModuleScopeResolver
         return $scopes === [] ? 'shared' : implode(',', $scopes);
     }
 
+    /**
+     * @param array<string, mixed> $route
+     */
     public static function isRouteAllowedForCurrentTenant(array $route): bool
     {
+        $rawTenantScopes = $route['tenantScopes'] ?? [];
+        if (!is_array($rawTenantScopes)) {
+            return true;
+        }
+
         $tenantScopes = array_values(array_filter(array_map(
-            static fn (mixed $value): string => trim((string) $value),
-            $route['tenantScopes'] ?? [],
+            static fn (mixed $value): string => is_scalar($value) ? trim((string) $value) : '',
+            $rawTenantScopes,
         )));
 
         if ($tenantScopes === []) {
@@ -81,22 +91,12 @@ final class TenantModuleScopeResolver
 
     private static function currentTenantId(): ?string
     {
-        if (!class_exists('Semitexa\\Tenancy\\Context\\CoroutineContextStore')) {
-            return null;
-        }
-
-        $context = \Semitexa\Tenancy\Context\CoroutineContextStore::get();
+        $context = CoroutineContextStore::get();
         if ($context === null) {
             return null;
         }
 
-        if (method_exists($context, 'getTenantId')) {
-            $tenantId = $context->getTenantId();
-
-            return $tenantId !== '' && $tenantId !== 'default' ? $tenantId : null;
-        }
-
-        $tenantId = (string) ($context->tenantId ?? '');
+        $tenantId = $context->getTenantId();
 
         return $tenantId !== '' && $tenantId !== 'default' ? $tenantId : null;
     }
