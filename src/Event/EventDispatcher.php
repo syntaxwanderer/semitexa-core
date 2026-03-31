@@ -36,11 +36,12 @@ final class EventDispatcher implements EventDispatcherInterface
         }
 
         $constructor = $reflection->getConstructor();
-        if ($constructor !== null && $constructor->getNumberOfRequiredParameters() > 0) {
-            throw new \InvalidArgumentException("Event class must have a zero-argument constructor: {$eventClass}");
+        if ($constructor === null) {
+            return DtoSerializer::hydrate($reflection->newInstance(), $payload);
         }
 
-        $instance = $reflection->newInstance();
+        $instance = $reflection->newInstanceArgs($this->buildConstructorArgs($constructor, $payload, $eventClass));
+
         return DtoSerializer::hydrate($instance, $payload);
     }
 
@@ -109,5 +110,47 @@ final class EventDispatcher implements EventDispatcherInterface
 
         $transport = QueueTransportRegistry::create($transportName);
         $transport->publish($queueName, $message->toJson());
+    }
+
+    /**
+     * @param array<mixed> $payload
+     * @return list<mixed>
+     */
+    private function buildConstructorArgs(\ReflectionMethod $constructor, array $payload, string $eventClass): array
+    {
+        $args = [];
+
+        foreach ($constructor->getParameters() as $parameter) {
+            $name = $parameter->getName();
+            $snakeName = strtolower(preg_replace('/[A-Z]/', '_$0', $name) ?? $name);
+
+            if (array_key_exists($name, $payload)) {
+                $args[] = $payload[$name];
+                continue;
+            }
+
+            if (array_key_exists($snakeName, $payload)) {
+                $args[] = $payload[$snakeName];
+                continue;
+            }
+
+            if ($parameter->isDefaultValueAvailable()) {
+                $args[] = $parameter->getDefaultValue();
+                continue;
+            }
+
+            if ($parameter->allowsNull()) {
+                $args[] = null;
+                continue;
+            }
+
+            throw new \InvalidArgumentException(sprintf(
+                'Missing constructor argument "%s" for event class %s.',
+                $name,
+                $eventClass,
+            ));
+        }
+
+        return $args;
     }
 }

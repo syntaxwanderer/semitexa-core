@@ -164,7 +164,9 @@ class AttributeDiscovery
             return null;
         }
 
-        $selectedRoutes = TenantModuleScopeResolver::selectRoutesForCurrentTenant($matches);
+        /** @var list<array<string, mixed>> $tenantSelectableMatches */
+        $tenantSelectableMatches = $matches;
+        $selectedRoutes = TenantModuleScopeResolver::selectRoutesForCurrentTenant($tenantSelectableMatches);
         if ($selectedRoutes === []) {
             return null;
         }
@@ -377,6 +379,8 @@ class AttributeDiscovery
             if ($selected === null) {
                 continue;
             }
+            $selectedModule = $selected['module'];
+            $selectedTenantScopes = $selected['tenantScopes'];
             $resolved = $selected['resolved'];
             $class = $selected['class'];
 
@@ -387,8 +391,8 @@ class AttributeDiscovery
                 'name' => $resolved['name'],
                 'responseClass' => $resolved['responseWith'],
                 'file' => $selected['file'],
-                'module' => $selected['module'],
-                'tenantScopes' => $selected['tenantScopes'],
+                'module' => $selectedModule,
+                'tenantScopes' => $selectedTenantScopes,
                 'handlers' => [],
             ];
 
@@ -430,8 +434,8 @@ class AttributeDiscovery
                 'type' => 'http-request',
                 'consumes' => $resolved['consumes'] ?? null,
                 'produces' => $routeProduces,
-                'module' => $selected['module'],
-                'tenantScopes' => $selected['tenantScopes'],
+                'module' => $selectedModule,
+                'tenantScopes' => $selectedTenantScopes,
             ];
 
             foreach ($candidates as $candidate) {
@@ -445,7 +449,10 @@ class AttributeDiscovery
             fn ($class) => (
                 (str_starts_with($class, 'Semitexa\\') || str_starts_with($class, 'App\\Modules\\'))
                 && self::isModuleActiveForClass($class)
-            ) || self::isProjectHandler($class)
+            ) || (
+                self::isProjectHandler($class)
+                && !str_starts_with($class, 'App\\Modules\\')
+            )
         );
         foreach ($httpHandlerClasses as $className) {
             try {
@@ -856,8 +863,24 @@ class AttributeDiscovery
      * Select the single Request for a route using override chain rules.
      * Only the current chain head can be overridden; otherwise throws.
      *
-     * @param list<array{class: string, file: string, priority: int, overrides: ?string, resolved: array}> $candidates
-     * @return array{class: string, file: string, priority: int, resolved: array}|null
+     * @param list<array{
+     *   class: string,
+     *   file: string,
+     *   priority: int,
+     *   overrides: ?string,
+     *   resolved: array,
+     *   module: string,
+     *   tenantScopes: list<string>
+     * }> $candidates
+     * @return array{
+     *   class: string,
+     *   file: string,
+     *   priority: int,
+     *   overrides?: ?string,
+     *   resolved: array,
+     *   module: string,
+     *   tenantScopes: list<string>
+     * }|null
      */
     private static function selectRequestByOverrideChain(array $candidates): ?array
     {

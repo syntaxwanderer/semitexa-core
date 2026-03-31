@@ -158,7 +158,7 @@ class ClassDiscovery
                 $iterator = new \RecursiveIteratorIterator(
                     new \RecursiveDirectoryIterator(
                         $dir,
-                        \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::FOLLOW_SYMLINKS,
+                        \FilesystemIterator::SKIP_DOTS,
                     ),
                 );
 
@@ -225,6 +225,7 @@ class ClassDiscovery
         $namespace = '';
         $collectNamespace = false;
         $collectClass = false;
+        /** @var int|string|null $previousSignificantToken */
         $previousSignificantToken = null;
 
         foreach ($tokens as $token) {
@@ -254,11 +255,19 @@ class ClassDiscovery
             }
 
             if ($id === T_CLASS || $id === T_INTERFACE || $id === T_TRAIT || $id === T_ENUM) {
-                if ($previousSignificantToken === T_DOUBLE_COLON || $previousSignificantToken === '::') {
+                if ($previousSignificantToken === T_DOUBLE_COLON) {
+                    continue;
+                }
+                if ($id === T_CLASS && $previousSignificantToken === T_NEW) {
                     continue;
                 }
                 $collectClass = true;
                 $previousSignificantToken = $id;
+                continue;
+            }
+
+            if ($collectClass && $text === '{') {
+                $collectClass = false;
                 continue;
             }
 
