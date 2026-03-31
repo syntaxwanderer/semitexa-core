@@ -1,0 +1,129 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Semitexa\Core\Support;
+
+final class TenantModuleScopeResolver
+{
+    /**
+     * @return list<string>
+     */
+    public static function scopesForModule(?string $moduleName): array
+    {
+        if ($moduleName === null || $moduleName === '' || $moduleName === 'project') {
+            return [];
+        }
+
+        $matchedTenantIds = [];
+
+        foreach (self::tenantModuleMap() as $tenantId => $modules) {
+            if (in_array($moduleName, $modules, true)) {
+                $matchedTenantIds[] = $tenantId;
+            }
+        }
+
+        sort($matchedTenantIds);
+
+        return $matchedTenantIds;
+    }
+
+    public static function scopeSignatureForModule(?string $moduleName): string
+    {
+        $scopes = self::scopesForModule($moduleName);
+
+        return $scopes === [] ? 'shared' : implode(',', $scopes);
+    }
+
+    public static function isRouteAllowedForCurrentTenant(array $route): bool
+    {
+        $tenantScopes = array_values(array_filter(array_map(
+            static fn (mixed $value): string => trim((string) $value),
+            $route['tenantScopes'] ?? [],
+        )));
+
+        if ($tenantScopes === []) {
+            return true;
+        }
+
+        $tenantId = self::currentTenantId();
+        if ($tenantId === null || $tenantId === '') {
+            return false;
+        }
+
+        return in_array($tenantId, $tenantScopes, true);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $routes
+     * @return list<array<string, mixed>>
+     */
+    public static function selectRoutesForCurrentTenant(array $routes): array
+    {
+        if ($routes === []) {
+            return [];
+        }
+
+        $scoped = array_values(array_filter(
+            $routes,
+            static fn (array $route): bool => !empty($route['tenantScopes']) && self::isRouteAllowedForCurrentTenant($route),
+        ));
+
+        if ($scoped !== []) {
+            return $scoped;
+        }
+
+        return array_values(array_filter(
+            $routes,
+            static fn (array $route): bool => empty($route['tenantScopes']),
+        ));
+    }
+
+    private static function currentTenantId(): ?string
+    {
+        if (!class_exists('Semitexa\\Tenancy\\Context\\CoroutineContextStore')) {
+            return null;
+        }
+
+        $context = \Semitexa\Tenancy\Context\CoroutineContextStore::get();
+        if ($context === null) {
+            return null;
+        }
+
+        if (method_exists($context, 'getTenantId')) {
+            $tenantId = $context->getTenantId();
+
+            return $tenantId !== '' && $tenantId !== 'default' ? $tenantId : null;
+        }
+
+        $tenantId = (string) ($context->tenantId ?? '');
+
+        return $tenantId !== '' && $tenantId !== 'default' ? $tenantId : null;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private static function tenantModuleMap(): array
+    {
+        $map = [];
+
+        foreach (getenv() ?: [] as $key => $value) {
+            if (!preg_match('/^TENANT_([A-Z0-9_]+?)_MODULES$/', (string) $key, $matches)) {
+                continue;
+            }
+
+            $tenantId = strtolower($matches[1]);
+            $modules = array_values(array_filter(array_map(
+                static fn (string $item): string => trim($item),
+                explode(',', (string) $value),
+            )));
+
+            if ($modules !== []) {
+                $map[$tenantId] = $modules;
+            }
+        }
+
+        return $map;
+    }
+}

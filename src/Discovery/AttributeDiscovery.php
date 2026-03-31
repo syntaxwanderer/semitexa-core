@@ -16,6 +16,7 @@ use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Core\Queue\HandlerExecution;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Pipeline\HandlerReflectionCache;
+use Semitexa\Core\Support\TenantModuleScopeResolver;
 use ReflectionClass;
 
 /**
@@ -113,6 +114,7 @@ class AttributeDiscovery
         if ($path === '') {
             $path = '/';
         }
+        $matches = [];
         foreach (self::$routes as $route) {
             $routePath = $route['path'];
             if ($routePath === '') {
@@ -122,7 +124,8 @@ class AttributeDiscovery
             
             // Exact match
             if ($routePath === $path && in_array($method, $routeMethods)) {
-                return self::enrichRoute($route);
+                $matches[] = self::enrichRoute($route);
+                continue;
             }
             
             // Pattern match (e.g., /window-manager/{type}/{file} matches /window-manager/js/window-manager.js)
@@ -152,12 +155,23 @@ class AttributeDiscovery
                 $pattern = '#^' . $pattern . '$#';
                 
                 if (preg_match($pattern, $path)) {
-                    return self::enrichRoute($route);
+                    $matches[] = self::enrichRoute($route);
                 }
             }
         }
-        
-        return null;
+
+        if ($matches === []) {
+            return null;
+        }
+
+        /** @var list<array<string, mixed>> $tenantSelectableMatches */
+        $tenantSelectableMatches = $matches;
+        $selectedRoutes = TenantModuleScopeResolver::selectRoutesForCurrentTenant($tenantSelectableMatches);
+        if ($selectedRoutes === []) {
+            return null;
+        }
+
+        return $selectedRoutes[0];
     }
 
     /**
@@ -342,12 +356,16 @@ class AttributeDiscovery
                 $methods = (array) ($resolved['methods'] ?? ['GET']);
                 sort($methods);
                 $routeKey = $resolved['path'] . "\0" . implode(',', array_map('strtoupper', $methods));
-                $byRoute[$routeKey][] = [
+                $moduleName = ModuleRegistry::getModuleNameForClass($className) ?? 'project';
+                $scopeSignature = TenantModuleScopeResolver::scopeSignatureForModule($moduleName);
+                $byRoute[$routeKey . "\0" . $scopeSignature][] = [
                     'class' => $className,
                     'file' => $meta['file'],
                     'priority' => $meta['priority'],
                     'overrides' => $overrides,
                     'resolved' => $resolved,
+                    'module' => $moduleName,
+                    'tenantScopes' => TenantModuleScopeResolver::scopesForModule($moduleName),
                 ];
             } catch (\Throwable $e) {
                 if (Environment::getEnvValue('APP_DEBUG') === '1') {
@@ -361,6 +379,8 @@ class AttributeDiscovery
             if ($selected === null) {
                 continue;
             }
+            $selectedModule = $selected['module'];
+            $selectedTenantScopes = $selected['tenantScopes'];
             $resolved = $selected['resolved'];
             $class = $selected['class'];
 
@@ -371,6 +391,8 @@ class AttributeDiscovery
                 'name' => $resolved['name'],
                 'responseClass' => $resolved['responseWith'],
                 'file' => $selected['file'],
+                'module' => $selectedModule,
+                'tenantScopes' => $selectedTenantScopes,
                 'handlers' => [],
             ];
 
@@ -412,6 +434,8 @@ class AttributeDiscovery
                 'type' => 'http-request',
                 'consumes' => $resolved['consumes'] ?? null,
                 'produces' => $routeProduces,
+                'module' => $selectedModule,
+                'tenantScopes' => $selectedTenantScopes,
             ];
 
             foreach ($candidates as $candidate) {
@@ -422,8 +446,13 @@ class AttributeDiscovery
         // Find handlers and map to requests (Semitexa packages + project App\ handlers)
         $httpHandlerClasses = array_filter(
             ClassDiscovery::findClassesWithAttribute(AsPayloadHandler::class),
-            fn ($class) => (str_starts_with($class, 'Semitexa\\') && self::isModuleActiveForClass($class))
-                || self::isProjectHandler($class)
+            fn ($class) => (
+                (str_starts_with($class, 'Semitexa\\') || str_starts_with($class, 'App\\Modules\\'))
+                && self::isModuleActiveForClass($class)
+            ) || (
+                self::isProjectHandler($class)
+                && !str_starts_with($class, 'App\\Modules\\')
+            )
         );
         foreach ($httpHandlerClasses as $className) {
             try {
@@ -834,8 +863,24 @@ class AttributeDiscovery
      * Select the single Request for a route using override chain rules.
      * Only the current chain head can be overridden; otherwise throws.
      *
-     * @param list<array{class: string, file: string, priority: int, overrides: ?string, resolved: array}> $candidates
-     * @return array{class: string, file: string, priority: int, resolved: array}|null
+     * @param list<array{
+     *   class: string,
+     *   file: string,
+     *   priority: int,
+     *   overrides: ?string,
+     *   resolved: array,
+     *   module: string,
+     *   tenantScopes: list<string>
+     * }> $candidates
+     * @return array{
+     *   class: string,
+     *   file: string,
+     *   priority: int,
+     *   overrides?: ?string,
+     *   resolved: array,
+     *   module: string,
+     *   tenantScopes: list<string>
+     * }|null
      */
     private static function selectRequestByOverrideChain(array $candidates): ?array
     {
