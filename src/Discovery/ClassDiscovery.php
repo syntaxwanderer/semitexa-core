@@ -212,23 +212,32 @@ class ClassDiscovery
         }
 
         $projectRoot = ProjectRoot::get();
+        $projectRootReal = realpath($projectRoot) ?: $projectRoot;
         $vendorRoot = $projectRoot . '/vendor/';
+        $vendorRootReal = $projectRootReal . '/vendor/';
         $realPath = realpath($dir);
         if ($realPath === false) {
             return false;
         }
 
-        // Keep fallback scanning limited to live project code and path repositories
-        // (e.g. vendor symlinks into packages/*). Regular vendor packages should rely
-        // on Composer's classmap and avoid a full filesystem walk on every bootstrap.
-        if (($realPath === $projectRoot . '/src' || str_starts_with($realPath, $projectRoot . '/src/'))
-            || ($realPath === $projectRoot . '/tests' || str_starts_with($realPath, $projectRoot . '/tests/'))
-            || ($realPath === $projectRoot . '/packages' || str_starts_with($realPath, $projectRoot . '/packages/'))
+        // Keep fallback scanning limited to live project code, Semitexa vendor
+        // packages, and path repositories (e.g. vendor symlinks into packages/*).
+        // Non-Semitexa vendor packages should still rely on Composer's classmap to
+        // avoid a full filesystem walk on every bootstrap.
+        if (($realPath === $projectRootReal . '/src' || str_starts_with($realPath, $projectRootReal . '/src/'))
+            || ($realPath === $projectRootReal . '/tests' || str_starts_with($realPath, $projectRootReal . '/tests/'))
+            || ($realPath === $projectRootReal . '/packages' || str_starts_with($realPath, $projectRootReal . '/packages/'))
         ) {
             return true;
         }
 
-        return str_starts_with($dir, $vendorRoot) && !str_starts_with($realPath, $vendorRoot);
+        if (($realPath === $projectRootReal . '/vendor/semitexa' || str_starts_with($realPath, $projectRootReal . '/vendor/semitexa/'))
+            && str_starts_with($dir, $vendorRoot)
+        ) {
+            return true;
+        }
+
+        return str_starts_with($dir, $vendorRoot) && !str_starts_with($realPath, $vendorRootReal);
     }
 
     private static function extractDeclaredClassName(string $filePath): ?string
