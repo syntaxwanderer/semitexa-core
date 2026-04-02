@@ -64,13 +64,28 @@ class ClassDiscovery
                 continue;
             }
 
-            if (!class_exists($className, true) && !interface_exists($className, true) && !trait_exists($className, true)) {
+            try {
+                $exists = class_exists($className, true) || interface_exists($className, true) || trait_exists($className, true);
+            } catch (\Throwable $e) {
+                // Class file loaded but references a missing dependency (e.g. a dev-only
+                // interface like PHPUnit's in production). Skip it — it cannot be used.
+                if (Environment::getEnvValue('APP_DEBUG') === '1') {
+                    error_log("[Semitexa] ClassDiscovery: skipping {$className} (load error): " . $e->getMessage());
+                }
+                continue;
+            }
+
+            if (!$exists) {
                 // class_exists with autoload failed — the class may have been found via
                 // PSR-4 directory scan but is absent from Composer's generated classmap.
                 // Load it directly with require_once (idempotent: won't double-include).
                 $filePath = self::$classMap[$className] ?? null;
                 if ($filePath !== null && is_file($filePath)) {
-                    (static function (string $f): void { require_once $f; })($filePath);
+                    try {
+                        (static function (string $f): void { require_once $f; })($filePath);
+                    } catch (\Throwable) {
+                        continue;
+                    }
                 }
                 if (!class_exists($className, false) && !interface_exists($className, false) && !trait_exists($className, false)) {
                     continue;
@@ -204,9 +219,9 @@ class ClassDiscovery
         // Keep fallback scanning limited to live project code and path repositories
         // (e.g. vendor symlinks into packages/*). Regular vendor packages should rely
         // on Composer's classmap and avoid a full filesystem walk on every bootstrap.
-        if (str_starts_with($realPath, $projectRoot . '/src/')
-            || str_starts_with($realPath, $projectRoot . '/tests/')
-            || str_starts_with($realPath, $projectRoot . '/packages/')
+        if (str_starts_with($realPath, $projectRoot . '/src')
+            || str_starts_with($realPath, $projectRoot . '/tests')
+            || str_starts_with($realPath, $projectRoot . '/packages')
         ) {
             return true;
         }
