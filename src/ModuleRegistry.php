@@ -78,6 +78,8 @@ class ModuleRegistry
      */
     public static function getModulesByType(string $type): array
     {
+        self::initialize();
+
         return array_filter(self::$modules, fn($module) => $module['type'] === $type);
     }
     
@@ -110,6 +112,8 @@ class ModuleRegistry
      */
     public static function isActive(string $moduleName): bool
     {
+        self::initialize();
+
         foreach (self::$modules as $module) {
             if ($module['name'] === $moduleName || in_array($moduleName, $module['aliases'], true)) {
                 return (bool)($module['config']['active'] ?? true);

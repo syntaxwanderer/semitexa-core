@@ -58,6 +58,8 @@ final class TenantModuleScopeResolver
 
         if (str_starts_with($normalized, 'semitexa-')) {
             $variants[] = substr($normalized, strlen('semitexa-'));
+        } elseif (str_starts_with($normalized, 'semitexa/')) {
+            $variants[] = substr($normalized, strlen('semitexa/'));
         } else {
             $variants[] = 'semitexa-' . $normalized;
         }
