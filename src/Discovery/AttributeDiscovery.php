@@ -57,6 +57,10 @@ class AttributeDiscovery
         if (self::$initialized) {
             return;
         }
+
+        // Discovery relies on tenant/module env such as TENANT_*_MODULES.
+        // CLI entrypoints can reach discovery before worker bootstrap syncs .env values.
+        Environment::syncEnvFromFiles();
         
         $startTime = microtime(true);
         
