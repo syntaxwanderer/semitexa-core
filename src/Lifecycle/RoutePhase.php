@@ -9,6 +9,7 @@ use Semitexa\Auth\AuthBootstrapper;
 use Semitexa\Core\Container\RequestScopedContainer;
 use Semitexa\Core\Discovery\AttributeDiscovery;
 use Semitexa\Core\Environment;
+use Semitexa\Core\Error\ErrorRouteDispatcher;
 use Semitexa\Core\Http\RouteType;
 use Semitexa\Core\Pipeline\RouteExecutor;
 use Semitexa\Core\Request;
@@ -20,9 +21,11 @@ use Semitexa\Core\HttpResponse;
 final class RoutePhase
 {
     /** Route name for custom 404 page */
-    public const ROUTE_NAME_404 = 'error.404';
+    public const ROUTE_NAME_404 = ErrorRouteDispatcher::ROUTE_NAME_404;
+    public const ROUTE_NAME_500 = ErrorRouteDispatcher::ROUTE_NAME_500;
 
     private readonly AttributeDiscovery $attributeDiscovery;
+    private readonly ErrorRouteDispatcher $errorRouteDispatcher;
 
     public function __construct(
         private readonly ContainerInterface $container,
@@ -30,7 +33,16 @@ final class RoutePhase
         private readonly ?AuthBootstrapper $authBootstrapper,
         private readonly Environment $environment,
     ) {
-        $this->attributeDiscovery = $this->container->get(AttributeDiscovery::class);
+        /** @var AttributeDiscovery $attributeDiscovery */
+        $attributeDiscovery = $this->container->get(AttributeDiscovery::class);
+        $this->attributeDiscovery = $attributeDiscovery;
+        $this->errorRouteDispatcher = new ErrorRouteDispatcher(
+            $this->attributeDiscovery,
+            $this->requestScopedContainer,
+            $this->container,
+            $this->authBootstrapper,
+            $this->environment,
+        );
     }
 
     public function execute(RequestLifecycleContext $context): HttpResponse
@@ -41,6 +53,7 @@ final class RoutePhase
         $route = $this->attributeDiscovery->findRoute($routingPath, $request->getMethod());
 
         if ($route) {
+            /** @var array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string} $route */
             return $this->handleRoute($route, $request);
         }
 
@@ -49,6 +62,7 @@ final class RoutePhase
             $altPath = $routingPath === '/' ? '' : '/';
             $route = $this->attributeDiscovery->findRoute($altPath, $request->getMethod());
             if ($route) {
+                /** @var array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string} $route */
                 return $this->handleRoute($route, $request);
             }
         }
@@ -93,12 +107,9 @@ final class RoutePhase
                 $logger->debug('Route not found', ['path' => $request->getPath(), 'message' => $e->getMessage()]);
             }
 
-            $currentRouteName = $route['name'] ?? null;
-            if ($currentRouteName !== self::ROUTE_NAME_404) {
-                $route404 = $this->attributeDiscovery->findRouteByName(self::ROUTE_NAME_404);
-                if ($route404 !== null) {
-                    return $this->handleRoute($route404, $request);
-                }
+            $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route);
+            if ($response !== null) {
+                return $response;
             }
             return HttpResponse::notFound($e->getMessage() ?: 'The requested resource was not found');
         }
@@ -114,15 +125,36 @@ final class RoutePhase
             error_log("[Semitexa] Critical Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
         }
 
+        $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route);
+        if ($response !== null) {
+            return $response;
+        }
+
         return \Semitexa\Core\Http\ErrorRenderer::render($e, $request, $this->environment->appDebug);
     }
 
     private function getNotFoundResponse(Request $request): HttpResponse
     {
-        $route404 = $this->attributeDiscovery->findRouteByName(self::ROUTE_NAME_404);
-        if ($route404 !== null) {
-            return $this->handleRoute($route404, $request);
+        $response = $this->errorRouteDispatcher->dispatchStatus(404, $request);
+        if ($response !== null) {
+            return $response;
         }
         return HttpResponse::notFound('The requested resource was not found');
+    }
+
+    /**
+     * @param array{name?: string}|null $currentRoute
+     */
+    public function renderErrorThrowable(\Throwable $throwable, Request $request, ?array $currentRoute = null): ?HttpResponse
+    {
+        return $this->errorRouteDispatcher->dispatchThrowable($throwable, $request, $currentRoute);
+    }
+
+    /**
+     * @param array{name?: string}|null $currentRoute
+     */
+    public function renderErrorStatus(int $statusCode, Request $request, ?array $currentRoute = null): ?HttpResponse
+    {
+        return $this->errorRouteDispatcher->dispatchStatus($statusCode, $request, $currentRoute);
     }
 }
