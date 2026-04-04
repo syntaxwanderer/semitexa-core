@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Tenant;
 
+use Semitexa\Core\Support\CoroutineLocal;
 use Semitexa\Core\Tenant\Layer\TenantLayerInterface;
 use Semitexa\Core\Tenant\Layer\TenantLayerValueInterface;
 use Semitexa\Core\Tenant\Layer\OrganizationLayer;
@@ -15,7 +16,7 @@ use Semitexa\Core\Tenant\Layer\EnvironmentValue;
 
 final class DefaultTenantContext implements TenantContextInterface
 {
-    private const CTX_KEY = '__tenant_context';
+    private const CTX_KEY = '__core_default_tenant_context';
 
     /** @worker-scoped CLI/non-coroutine fallback only. */
     private static ?self $instance = null;
@@ -29,8 +30,15 @@ final class DefaultTenantContext implements TenantContextInterface
     public static function getInstance(): self
     {
         if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
-            $ctx = \Swoole\Coroutine::getContext();
-            return $ctx[self::CTX_KEY] ??= new self();
+            $existing = CoroutineLocal::get(self::CTX_KEY);
+            if ($existing instanceof self) {
+                return $existing;
+            }
+
+            $context = new self();
+            CoroutineLocal::set(self::CTX_KEY, $context);
+
+            return $context;
         }
 
         return self::$instance ??= new self();
@@ -62,7 +70,9 @@ final class DefaultTenantContext implements TenantContextInterface
     public static function get(): ?self
     {
         if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
-            return \Swoole\Coroutine::getContext()[self::CTX_KEY] ?? null;
+            $context = CoroutineLocal::get(self::CTX_KEY);
+
+            return $context instanceof self ? $context : null;
         }
 
         return self::$instance;

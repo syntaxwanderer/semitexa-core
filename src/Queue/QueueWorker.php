@@ -102,7 +102,9 @@ class QueueWorker
         }
 
         try {
-            $event = $this->hydrateDto($message->eventClass, $message->eventPayload);
+            /** @var array<string, mixed> $eventPayload */
+            $eventPayload = $message->eventPayload;
+            $event = $this->hydrateDto($message->eventClass, $eventPayload);
             $container = ContainerFactory::get();
             $listener = $container->get($message->listenerClass);
             if (!method_exists($listener, 'handle')) {
@@ -144,8 +146,12 @@ class QueueWorker
         }
 
         try {
-            $request = $this->hydrateDto($message->requestClass, $message->requestPayload);
-            $response = $this->hydrateDto($message->responseClass, $message->responsePayload);
+            /** @var array<string, mixed> $requestPayload */
+            $requestPayload = $message->requestPayload;
+            /** @var array<string, mixed> $responsePayload */
+            $responsePayload = $message->responsePayload;
+            $request = $this->hydrateDto($message->requestClass, $requestPayload);
+            $response = $this->hydrateDto($message->responseClass, $responsePayload);
 
             $container = ContainerFactory::get();
             $handler = $container->get($handlerClass);
@@ -239,6 +245,9 @@ class QueueWorker
     }
     
 
+    /**
+     * @param array<string, mixed> $payload
+     */
     private function hydrateDto(string $class, array $payload): object
     {
         $dto = class_exists($class) ? new $class() : new \stdClass();
@@ -246,4 +255,3 @@ class QueueWorker
         return PayloadSerializer::hydrate($dto, $payload);
     }
 }
-

@@ -46,6 +46,8 @@ readonly class Environment
             return $value !== false ? $value : ($fileEnv[$key] ?? $default);
         };
         
+        $redisPoolSize = $get('REDIS_POOL_SIZE', '16');
+
         return new self(
             appEnv: $get('APP_ENV', 'prod'),
             appDebug: (bool) $get('APP_DEBUG', '0'),
@@ -69,7 +71,7 @@ readonly class Environment
             corsAllowMethods: $get('CORS_ALLOW_METHODS', 'GET, POST, PUT, DELETE, OPTIONS'),
             corsAllowHeaders: $get('CORS_ALLOW_HEADERS', 'Content-Type, Authorization'),
             corsAllowCredentials: (bool) $get('CORS_ALLOW_CREDENTIALS', '0'),
-            redisPoolSize: (int) $get('REDIS_POOL_SIZE', '16'),
+            redisPoolSize: is_scalar($redisPoolSize) ? (int) $redisPoolSize : 16,
         );
     }
     

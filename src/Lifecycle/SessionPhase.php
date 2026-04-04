@@ -72,7 +72,7 @@ final class SessionPhase
         $session = $this->requestScopedContainer->get(SessionInterface::class);
         $cookieJar = $this->requestScopedContainer->get(CookieJarInterface::class);
 
-        if (!$session instanceof Session) {
+        if (!$session instanceof Session || !$cookieJar instanceof CookieJarInterface) {
             return $response;
         }
 
@@ -106,6 +106,7 @@ final class SessionPhase
 
         $lines = $cookieJar->getSetCookieLines();
         if ($lines !== []) {
+            /** @var array<int|string, string> $lines */
             $response = $response->withHeaders(['Set-Cookie' => $lines]);
         }
 
@@ -117,13 +118,16 @@ final class SessionPhase
         $redisHost = Environment::getEnvValue('REDIS_HOST');
         if ($redisHost !== null && $redisHost !== '') {
             if ($this->container->has(RedisConnectionPool::class)) {
-                return new RedisSessionHandler($this->container->get(RedisConnectionPool::class));
+                $pool = $this->container->get(RedisConnectionPool::class);
+                if ($pool instanceof RedisConnectionPool) {
+                    return new RedisSessionHandler($pool);
+                }
             }
             // Fallback: create a single-connection pool (CLI/tests without container bootstrap)
             $pool = new RedisConnectionPool(1, [
                 'host' => $redisHost,
                 'port' => (int) Environment::getEnvValue('REDIS_PORT', '6379'),
-                'password' => Environment::getEnvValue('REDIS_PASSWORD', ''),
+                'password' => (string) (Environment::getEnvValue('REDIS_PASSWORD', '') ?? ''),
             ]);
             return new RedisSessionHandler($pool);
         }
@@ -154,19 +158,19 @@ final class SessionPhase
      */
     private function initContextInterfaces(): void
     {
-        $tenantContext = DefaultTenantContext::getInstance();
         if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
             $resolved = CoroutineContextStore::get();
             if ($resolved !== null) {
-                $tenantContext = $resolved;
                 TenancyTenantContext::set($resolved);
+                $this->requestScopedContainer->set(TenantContextInterface::class, $resolved);
             } else {
                 TenancyTenantContext::clear();
+                $this->requestScopedContainer->set(TenantContextInterface::class, DefaultTenantContext::getInstance());
             }
         } else {
             TenancyTenantContext::clear();
+            $this->requestScopedContainer->set(TenantContextInterface::class, DefaultTenantContext::getInstance());
         }
-        $this->requestScopedContainer->set(TenantContextInterface::class, $tenantContext);
 
         $authContext = \Semitexa\Auth\Context\AuthManager::getInstance();
         $this->requestScopedContainer->set(AuthContextInterface::class, $authContext);

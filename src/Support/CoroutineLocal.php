@@ -21,7 +21,9 @@ final class CoroutineLocal
     public static function get(string $key, mixed $default = null): mixed
     {
         if (self::inCoroutine()) {
-            return \Swoole\Coroutine::getContext()[$key] ?? $default;
+            $context = self::coroutineContext();
+
+            return $context[$key] ?? $default;
         }
 
         return self::$cliStore[$key] ?? $default;
@@ -30,7 +32,8 @@ final class CoroutineLocal
     public static function set(string $key, mixed $value): void
     {
         if (self::inCoroutine()) {
-            \Swoole\Coroutine::getContext()[$key] = $value;
+            $context = self::coroutineContext();
+            $context[$key] = $value;
             return;
         }
 
@@ -40,7 +43,9 @@ final class CoroutineLocal
     public static function has(string $key): bool
     {
         if (self::inCoroutine()) {
-            return isset(\Swoole\Coroutine::getContext()[$key]);
+            $context = self::coroutineContext();
+
+            return isset($context[$key]);
         }
 
         return isset(self::$cliStore[$key]);
@@ -49,7 +54,8 @@ final class CoroutineLocal
     public static function remove(string $key): void
     {
         if (self::inCoroutine()) {
-            unset(\Swoole\Coroutine::getContext()[$key]);
+            $context = self::coroutineContext();
+            unset($context[$key]);
             return;
         }
 
@@ -68,5 +74,16 @@ final class CoroutineLocal
     {
         return class_exists(\Swoole\Coroutine::class, false)
             && \Swoole\Coroutine::getCid() >= 0;
+    }
+
+    /**
+     * @return \ArrayAccess<string, mixed>
+     */
+    private static function coroutineContext(): \ArrayAccess
+    {
+        /** @var \ArrayAccess<string, mixed> $context */
+        $context = \Swoole\Coroutine::getContext();
+
+        return $context;
     }
 }

@@ -50,7 +50,7 @@ final class RedisConnectionPool
             return;
         }
 
-        if (!$this->inSwoole()) {
+        if (!$this->inSwoole() || \Swoole\Coroutine::getuid() === -1) {
             return;
         }
 

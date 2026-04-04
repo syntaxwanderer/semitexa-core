@@ -154,7 +154,10 @@ final class PipelineExecutor
             ? $context->resourceDto->getRenderHandle()
             : null;
 
-        if (!$handle) {
+        if (!is_string($handle) || $handle === '') {
+            return;
+        }
+        if (!is_object($context->resourceDto)) {
             return;
         }
 
