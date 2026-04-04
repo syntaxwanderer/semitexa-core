@@ -70,6 +70,7 @@ class Application
     /** @var LocaleBootstrapper|null */
     private ?LocaleBootstrapper $localeBootstrapper = null;
     private ?string $localeStrippedPath = null;
+    private SessionHandlerInterface $sessionHandler;
 
     public function __construct(?ContainerInterface $container = null)
     {
@@ -94,69 +95,64 @@ class Application
             $localeManager = new \Semitexa\Locale\Context\LocaleManager();
             $this->localeBootstrapper = new LocaleBootstrapper($localeManager, events: $events);
         }
+
+        $this->sessionHandler = self::createSessionHandler();
     }
 
     public function handleRequest(Request $request): Response
     {
         return self::measure('Application::handleRequest', function() use ($request) {
             $this->localeStrippedPath = null;
-            $runId = 'initial';
-            $segmentStart = microtime(true);
-            $this->debugLog('H1', 'Application::handleRequest', 'request_received', [
-                'path' => $request->getPath(),
-                'method' => $request->getMethod(),
-            ], $runId);
 
-            // Resolve tenant context via tenancy module (coroutine-safe, event-driven)
-            if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
-                $tenantResponse = $this->tenancy->getHandler()->handle($request);
-                if ($tenantResponse !== null) {
-                    return $tenantResponse; // Short-circuit: tenant not found or required
-                }
+            // Tenant resolution (can short-circuit)
+            $tenantResponse = $this->resolveTenancy($request);
+            if ($tenantResponse !== null) {
+                return $tenantResponse;
             }
 
-            // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
+            // Session and cookies
             $this->initSessionAndCookies($request);
 
-            // Locale resolution (Tenant -> Locale order; locale can use request path/header)
+            // Locale resolution (can redirect)
             $localeRedirect = $this->resolveLocaleAndUpdateContainer($request);
             if ($localeRedirect !== null) {
                 return $this->finalizeSessionAndCookies($request, $localeRedirect);
             }
 
-            // NO AttributeDiscovery::initialize() here — already done in build()
-
-            // Try to find route using AttributeDiscovery
-            $routingPath = $this->getRoutingPath($request);
-            $route = AttributeDiscovery::findRoute($routingPath, $request->getMethod());
-            $this->debugLog('H1', 'Application::handleRequest', 'route_discovery', [
-                'path' => $routingPath,
-                'method' => $request->getMethod(),
-                'routeFound' => (bool) $route,
-                'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),
-            ], $runId);
-            $segmentStart = microtime(true);
-
-            // Route found or not - no debug output needed
-            $response = null;
-            if ($route) {
-                $response = $this->handleRoute($route, $request);
-            } else {
-                if ($routingPath === '/' || $routingPath === '') {
-                    $altPath = $routingPath === '/' ? '' : '/';
-                    $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
-                    if ($route) {
-                        $response = $this->handleRoute($route, $request);
-                    } else {
-                        $response = $this->getNotFoundResponse($request);
-                    }
-                } else {
-                    $response = $this->getNotFoundResponse($request);
-                }
-            }
+            // Route matching and execution
+            $response = $this->matchAndExecuteRoute($request);
 
             return $this->finalizeSessionAndCookies($request, $response);
         });
+    }
+
+    private function resolveTenancy(Request $request): ?Response
+    {
+        if ($this->tenancy === null || !$this->tenancy->isEnabled()) {
+            return null;
+        }
+        return $this->tenancy->getHandler()->handle($request);
+    }
+
+    private function matchAndExecuteRoute(Request $request): Response
+    {
+        $routingPath = $this->getRoutingPath($request);
+        $route = AttributeDiscovery::findRoute($routingPath, $request->getMethod());
+
+        if ($route) {
+            return $this->handleRoute($route, $request);
+        }
+
+        // Try alternate root path normalization ('/' vs '')
+        if ($routingPath === '/' || $routingPath === '') {
+            $altPath = $routingPath === '/' ? '' : '/';
+            $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
+            if ($route) {
+                return $this->handleRoute($route, $request);
+            }
+        }
+
+        return $this->getNotFoundResponse($request);
     }
 
     /**
@@ -197,7 +193,7 @@ class Application
         }
 
         if ($e instanceof \Semitexa\Core\Exception\NotFoundException) {
-            if ($logger) {
+            if ($logger instanceof \Semitexa\Core\Log\LoggerInterface) {
                 $logger->debug('Route not found', ['path' => $request->getPath(), 'message' => $e->getMessage()]);
             }
 
@@ -211,7 +207,7 @@ class Application
             return Response::notFound($e->getMessage() ?: 'The requested resource was not found');
         }
 
-        if ($logger) {
+        if ($logger instanceof \Semitexa\Core\Log\LoggerInterface) {
             $logger->error($e->getMessage(), [
                 'exception' => get_debug_type($e),
                 'file' => $e->getFile(),
@@ -253,24 +249,12 @@ class Application
             $sessionId = bin2hex(random_bytes(16));
         }
         $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
-        $handler = self::createSessionHandler();
-        $handlerType = $handler instanceof \Semitexa\Core\Session\RedisSessionHandler ? 'redis' : 'swoole_table';
-        $session = new Session($sessionId, $handler, $cookieName, $sessionLifetime);
+        $session = new Session($sessionId, $this->sessionHandler, $cookieName, $sessionLifetime);
         $this->requestScopedContainer->set(SessionInterface::class, $session);
         $this->requestScopedContainer->set(CookieJarInterface::class, new CookieJar($request));
         $this->requestScopedContainer->set(Request::class, $request);
 
         $this->initContextInterfaces();
-
-        \Semitexa\Core\Debug\SessionDebugLog::log('Application.initSessionAndCookies', [
-            'path' => $request->getPath(),
-            'method' => $request->getMethod(),
-            'handler' => $handlerType,
-            'session_id_source' => $fromCookie ? 'from_cookie' : 'new',
-            'session_id_preview' => substr($sessionId, 0, 8) . '…',
-            'cookie_name' => $cookieName,
-            'has_auth_user_id' => $session->has('_auth_user_id'),
-        ]);
     }
 
     private static function createSessionHandler(): SessionHandlerInterface
@@ -291,42 +275,66 @@ class Application
             return $response;
         }
 
-        $session->save();
+        if (!$session instanceof Session) {
+            return $response;
+        }
 
-        $cookieName = $session->getCookieName();
-        $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
-        $linesBeforeSession = $cookieJar->getSetCookieLines();
-        \Semitexa\Core\Debug\SessionDebugLog::log('Application.finalizeSessionAndCookies.beforeAddSession', [
-            'path' => $request->getPath(),
-            'method' => $request->getMethod(),
-            'session_id_preview' => substr($session->getSessionIdForCookie(), 0, 8) . '…',
-            'has_auth_user_id' => $session->has('_auth_user_id'),
-            'jar_line_count' => count($linesBeforeSession),
-        ]);
-        $cookieJar->set($cookieName, $session->getSessionIdForCookie(), [
-            'path' => '/',
-            'httpOnly' => true,
-            'sameSite' => 'lax',
-            'maxAge' => $sessionLifetime,
-        ]);
+        $sessionPersisted = false;
+
+        try {
+            $session->save();
+            $sessionPersisted = true;
+        } catch (\Throwable $e) {
+            $this->logSessionPersistenceFailure($e, $request);
+            try {
+                $this->sessionHandler = self::createSessionHandler();
+                $session->setHandler($this->sessionHandler);
+                $session->save();
+                $sessionPersisted = true;
+            } catch (\Throwable) {
+                // Preserve already queued cookies even when session persistence fails.
+            }
+        }
+
+        if ($sessionPersisted) {
+            $cookieName = $session->getCookieName();
+            $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
+            $cookieJar->set($cookieName, $session->getSessionIdForCookie(), [
+                'path' => '/',
+                'httpOnly' => true,
+                'sameSite' => 'lax',
+                'maxAge' => $sessionLifetime,
+            ]);
+        }
 
         $lines = $cookieJar->getSetCookieLines();
         if ($lines !== []) {
             $response = $response->withHeaders(['Set-Cookie' => $lines]);
         }
 
-        $cookieNamesFromLines = [];
-        foreach ($lines as $line) {
-            $eq = strpos($line, '=');
-            $cookieNamesFromLines[] = $eq !== false ? rawurldecode(trim(substr($line, 0, $eq))) : '?';
-        }
-        \Semitexa\Core\Debug\SessionDebugLog::log('Application.finalizeSessionAndCookies', [
-            'path' => $request->getPath(),
-            'set_cookie_count' => count($lines),
-            'set_cookie_names' => $cookieNamesFromLines,
-            'session_id_preview' => substr($session->getSessionIdForCookie(), 0, 8) . '…',
-        ]);
         return $response;
+    }
+
+    private function logSessionPersistenceFailure(\Throwable $e, Request $request): void
+    {
+        try {
+            $logger = $this->container->get(\Semitexa\Core\Log\LoggerInterface::class);
+            if (!$logger instanceof \Semitexa\Core\Log\LoggerInterface) {
+                throw new \RuntimeException('Logger service has invalid type.');
+            }
+
+            $logger->error('Session persistence failed', [
+                'path' => $request->getPath(),
+                'method' => $request->getMethod(),
+                'exception' => get_debug_type($e),
+                'message' => $e->getMessage(),
+            ]);
+            return;
+        } catch (\Throwable) {
+            // Fall back to PHP error log when the logger is unavailable.
+        }
+
+        error_log('[Semitexa] Session persistence failed: ' . $e->getMessage());
     }
 
     /**
@@ -411,31 +419,5 @@ class Application
 
         $localeContext = DefaultLocaleContext::getInstance();
         $this->requestScopedContainer->set(LocaleContextInterface::class, $localeContext);
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    private function debugLog(string $hypothesisId, string $location, string $message, array $data, string $runId): void
-    {
-        // #region agent log
-        $payload = [
-            'sessionId' => 'debug-session',
-            'runId' => $runId,
-            'hypothesisId' => $hypothesisId,
-            'location' => $location,
-            'message' => $message,
-            'data' => $data,
-            'timestamp' => (int) round(microtime(true) * 1000),
-        ];
-        $logDir = \Semitexa\Core\Util\ProjectRoot::get() . '/var/log';
-        if (is_dir($logDir)) {
-            @file_put_contents(
-                $logDir . '/debug.log',
-                json_encode($payload) . "\n",
-                FILE_APPEND
-            );
-        }
-        // #endregion
     }
 }
