@@ -7,9 +7,9 @@ namespace Semitexa\Core\Http\Response;
 use Semitexa\Core\Contract\LayoutRenderableInterface;
 use Semitexa\Core\Contract\ResourceInterface;
 use Semitexa\Core\Http\HttpStatus;
-use Semitexa\Core\Response as CoreResponse;
+use Semitexa\Core\HttpResponse as CoreResponse;
 
-class GenericResponse implements ResourceInterface, LayoutRenderableInterface
+class ResourceResponse implements ResourceInterface, LayoutRenderableInterface
 {
     public function __construct(
         private string $content = '',

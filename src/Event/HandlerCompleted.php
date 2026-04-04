@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Semitexa\Core\Events;
+namespace Semitexa\Core\Event;
 
-use Semitexa\Core\Attributes\AsEvent;
+use Semitexa\Core\Attribute\AsEvent;
 
 #[AsEvent]
 final class HandlerCompleted

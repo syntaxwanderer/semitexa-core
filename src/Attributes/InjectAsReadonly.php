@@ -4,13 +4,4 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Attributes;
 
-use Attribute;
-
-/**
- * Inject a shared instance from the readonly graph (one per worker, same for all requests).
- * Only allowed on protected properties. The type to inject is the property's type hint.
- */
-#[Attribute(Attribute::TARGET_PROPERTY)]
-final class InjectAsReadonly
-{
-}
+\class_alias(\Semitexa\Core\Attribute\InjectAsReadonly::class, __NAMESPACE__ . '\\InjectAsReadonly');

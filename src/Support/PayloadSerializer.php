@@ -11,7 +11,7 @@ use ReflectionClass;
  * toArray: calls get*() for each getter; key = camelCase name without "get".
  * hydrate: for each key, calls set{CamelCase}($value) if method exists.
  */
-class DtoSerializer
+class PayloadSerializer
 {
     public static function toArray(object $dto): array
     {

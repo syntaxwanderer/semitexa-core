@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Console\Command;
 
-use Semitexa\Core\Attributes\AsCommand;
+use Semitexa\Core\Attribute\AsCommand;
 use Semitexa\Core\Container\ServiceContractRegistry;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\ModuleRegistry;
@@ -22,6 +22,13 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'registry:sync:contracts', description: 'Generate contract resolvers in src/registry/Contracts/ for interfaces with 2+ implementations.')]
 class RegistrySyncContractsCommand extends BaseCommand
 {
+    public function __construct(
+        private readonly ClassDiscovery $classDiscovery,
+        private readonly ModuleRegistry $moduleRegistry,
+    ) {
+        parent::__construct();
+    }
+
     protected function configure(): void
     {
         $this->setName('registry:sync:contracts')
@@ -33,10 +40,7 @@ class RegistrySyncContractsCommand extends BaseCommand
         $root = $this->getProjectRoot();
         $this->ensureRegistryDirs($root);
 
-        ClassDiscovery::initialize();
-        ModuleRegistry::initialize();
-
-        $contractRegistry = new ServiceContractRegistry();
+        $contractRegistry = new ServiceContractRegistry($this->classDiscovery, $this->moduleRegistry);
         $details = $contractRegistry->getContractDetails();
         $multiImpl = array_filter($details, function(array $d): bool {
             return isset($d['implementations']) && count($d['implementations']) >= 2;

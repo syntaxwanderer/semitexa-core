@@ -12,7 +12,7 @@ use ReflectionNamedType;
 use ReflectionUnionType;
 
 /**
- * Hydrates Request DTO from HTTP Request using setter convention.
+ * Hydrates Payload from HTTP Request using setter convention.
  *
  * For each key in raw data (JSON/POST/query + path params), calls set{CamelCase}($value)
  * if the method exists. Value is cast to the setter's parameter type before calling.
@@ -22,7 +22,7 @@ use ReflectionUnionType;
  * be meaningfully coerced throw TypeMismatchException instead of silently casting.
  * Intended for use by semitexa-testing's InProcessTransport only.
  */
-class RequestDtoHydrator
+class PayloadHydrator
 {
     private static bool $strictTypes = false;
 
@@ -87,7 +87,7 @@ class RequestDtoHydrator
     private static function extractPathParams(object $dto, Request $httpRequest): array
     {
         $reflection = new ReflectionClass($dto);
-        $requestAttrs = $reflection->getAttributes(\Semitexa\Core\Attributes\AsPayload::class);
+        $requestAttrs = $reflection->getAttributes(\Semitexa\Core\Attribute\AsPayload::class);
         if (empty($requestAttrs)) {
             return [];
         }

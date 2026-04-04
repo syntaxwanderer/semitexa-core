@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Semitexa\Core\Util;
+namespace Semitexa\Core\Support;
 
 class ProjectRoot
 {
@@ -47,7 +47,7 @@ class ProjectRoot
             $dir = $parent;
         }
 
-        // 3. Fallback: 4 levels up from Util/
+        // 3. Fallback: 4 levels up from Support/
         self::$root = dirname(__DIR__, 4);
         return self::$root;
     }

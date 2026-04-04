@@ -10,7 +10,7 @@ use Semitexa\Core\Http\HttpStatus;
 /**
  * HTTP Response representation
  */
-readonly class Response implements ResourceInterface
+readonly class HttpResponse implements ResourceInterface
 {
     public function __construct(
         public string $content,
