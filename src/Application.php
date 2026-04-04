@@ -70,6 +70,7 @@ class Application
     /** @var LocaleBootstrapper|null */
     private ?LocaleBootstrapper $localeBootstrapper = null;
     private ?string $localeStrippedPath = null;
+    private SessionHandlerInterface $sessionHandler;
 
     public function __construct(?ContainerInterface $container = null)
     {
@@ -94,6 +95,8 @@ class Application
             $localeManager = new \Semitexa\Locale\Context\LocaleManager();
             $this->localeBootstrapper = new LocaleBootstrapper($localeManager, events: $events);
         }
+
+        $this->sessionHandler = self::createSessionHandler();
     }
 
     public function handleRequest(Request $request): Response
@@ -107,56 +110,61 @@ class Application
                 'method' => $request->getMethod(),
             ], $runId);
 
-            // Resolve tenant context via tenancy module (coroutine-safe, event-driven)
-            if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
-                $tenantResponse = $this->tenancy->getHandler()->handle($request);
-                if ($tenantResponse !== null) {
-                    return $tenantResponse; // Short-circuit: tenant not found or required
-                }
+            // Tenant resolution (can short-circuit)
+            $tenantResponse = $this->resolveTenancy($request);
+            if ($tenantResponse !== null) {
+                return $tenantResponse;
             }
 
-            // Session and cookies (request-scoped; handlers inject SessionInterface / CookieJarInterface)
+            // Session and cookies
             $this->initSessionAndCookies($request);
 
-            // Locale resolution (Tenant -> Locale order; locale can use request path/header)
+            // Locale resolution (can redirect)
             $localeRedirect = $this->resolveLocaleAndUpdateContainer($request);
             if ($localeRedirect !== null) {
                 return $this->finalizeSessionAndCookies($request, $localeRedirect);
             }
 
-            // NO AttributeDiscovery::initialize() here — already done in build()
-
-            // Try to find route using AttributeDiscovery
-            $routingPath = $this->getRoutingPath($request);
-            $route = AttributeDiscovery::findRoute($routingPath, $request->getMethod());
             $this->debugLog('H1', 'Application::handleRequest', 'route_discovery', [
-                'path' => $routingPath,
+                'path' => $this->getRoutingPath($request),
                 'method' => $request->getMethod(),
-                'routeFound' => (bool) $route,
                 'duration_ms' => round((microtime(true) - $segmentStart) * 1000, 2),
             ], $runId);
-            $segmentStart = microtime(true);
 
-            // Route found or not - no debug output needed
-            $response = null;
-            if ($route) {
-                $response = $this->handleRoute($route, $request);
-            } else {
-                if ($routingPath === '/' || $routingPath === '') {
-                    $altPath = $routingPath === '/' ? '' : '/';
-                    $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
-                    if ($route) {
-                        $response = $this->handleRoute($route, $request);
-                    } else {
-                        $response = $this->getNotFoundResponse($request);
-                    }
-                } else {
-                    $response = $this->getNotFoundResponse($request);
-                }
-            }
+            // Route matching and execution
+            $response = $this->matchAndExecuteRoute($request);
 
             return $this->finalizeSessionAndCookies($request, $response);
         });
+    }
+
+    private function resolveTenancy(Request $request): ?Response
+    {
+        if ($this->tenancy === null || !$this->tenancy->isEnabled()) {
+            return null;
+        }
+        return $this->tenancy->getHandler()->handle($request);
+    }
+
+    private function matchAndExecuteRoute(Request $request): Response
+    {
+        $routingPath = $this->getRoutingPath($request);
+        $route = AttributeDiscovery::findRoute($routingPath, $request->getMethod());
+
+        if ($route) {
+            return $this->handleRoute($route, $request);
+        }
+
+        // Try alternate root path normalization ('/' vs '')
+        if ($routingPath === '/' || $routingPath === '') {
+            $altPath = $routingPath === '/' ? '' : '/';
+            $route = AttributeDiscovery::findRoute($altPath, $request->getMethod());
+            if ($route) {
+                return $this->handleRoute($route, $request);
+            }
+        }
+
+        return $this->getNotFoundResponse($request);
     }
 
     /**
@@ -253,8 +261,8 @@ class Application
             $sessionId = bin2hex(random_bytes(16));
         }
         $sessionLifetime = (int) (Environment::getEnvValue('SESSION_LIFETIME') ?? '3600');
-        $handler = self::createSessionHandler();
-        $handlerType = $handler instanceof \Semitexa\Core\Session\RedisSessionHandler ? 'redis' : 'swoole_table';
+        $handler = $this->sessionHandler;
+        $handlerType = $handler instanceof RedisSessionHandler ? 'redis' : 'swoole_table';
         $session = new Session($sessionId, $handler, $cookieName, $sessionLifetime);
         $this->requestScopedContainer->set(SessionInterface::class, $session);
         $this->requestScopedContainer->set(CookieJarInterface::class, new CookieJar($request));

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Discovery;
 
-use Semitexa\Core\Environment;
 use Semitexa\Core\Util\ProjectRoot;
 
 class ClassDiscovery
@@ -69,9 +68,7 @@ class ClassDiscovery
             } catch (\Throwable $e) {
                 // Class file loaded but references a missing dependency (e.g. a dev-only
                 // interface like PHPUnit's in production). Skip it — it cannot be used.
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] ClassDiscovery: skipping {$className} (load error): " . $e->getMessage());
-                }
+                BootDiagnostics::current()->skip('ClassDiscovery', "Skipping {$className} (load error): " . $e->getMessage(), $e);
                 continue;
             }
 
@@ -84,9 +81,7 @@ class ClassDiscovery
                     try {
                         (static function (string $f): void { require_once $f; })($filePath);
                     } catch (\Throwable $e) {
-                        if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                            error_log("[Semitexa] ClassDiscovery: require_once failed for {$className} ({$filePath}): " . $e->getMessage());
-                        }
+                        BootDiagnostics::current()->skip('ClassDiscovery', "require_once failed for {$className} ({$filePath}): " . $e->getMessage(), $e);
                     }
                 }
                 if (!class_exists($className, false) && !interface_exists($className, false) && !trait_exists($className, false)) {
@@ -102,9 +97,7 @@ class ClassDiscovery
                     $classes[] = $className;
                 }
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] ClassDiscovery::findClassesWithAttribute({$attributeClass}) failed for {$className}: " . $e->getMessage());
-                }
+                BootDiagnostics::current()->skip('ClassDiscovery', "findClassesWithAttribute({$attributeClass}) failed for {$className}: " . $e->getMessage(), $e);
             }
         }
 

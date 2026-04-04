@@ -7,8 +7,8 @@ namespace Semitexa\Core\Console;
 use Semitexa\Core\Attributes\AsCommand;
 use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Container\NotFoundException;
+use Semitexa\Core\Discovery\BootDiagnostics;
 use Semitexa\Core\Discovery\ClassDiscovery;
-use Semitexa\Core\Environment;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Application as SymfonyApplication;
 use ReflectionClass;
@@ -37,9 +37,7 @@ class Application extends SymfonyApplication
                 }
                 $commandsWithMeta[] = ['class' => $className, 'attr' => $attr];
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] Console Application: skip command {$className}: " . $e->getMessage());
-                }
+                BootDiagnostics::current()->skip('Console', "Skip command {$className}: " . $e->getMessage(), $e);
             }
         }
 
@@ -60,9 +58,7 @@ class Application extends SymfonyApplication
                 }
                 $this->add($command);
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] Console Application: could not register command {$attr->name} ({$className}): " . $e->getMessage());
-                }
+                BootDiagnostics::current()->skip('Console', "Could not register command {$attr->name} ({$className}): " . $e->getMessage(), $e);
             }
         }
     }
@@ -91,9 +87,7 @@ class Application extends SymfonyApplication
             } catch (NotFoundException $e) {
                 $resolved = $this->tryAutoInstantiate($typeName);
                 if ($resolved === null) {
-                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                        error_log("[Semitexa] Console Application: skip {$className}, container has no {$typeName}");
-                    }
+                    BootDiagnostics::current()->skip('Console', "Skip {$className}, container has no {$typeName}");
                     return null;
                 }
                 $args[] = $resolved;

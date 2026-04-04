@@ -276,9 +276,21 @@ class AttributeDiscovery
     }
     
     /**
-     * Scan attributes using intelligent autoloader
+     * Scan attributes using intelligent autoloader.
+     * Orchestrates discovery in named phases for readability.
      */
     private static function scanAttributesIntelligently(): void
+    {
+        $diagnostics = BootDiagnostics::current();
+
+        self::resetState();
+        self::discoverPayloadsAndRoutes($diagnostics);
+        self::discoverHandlers($diagnostics);
+        self::discoverParts($diagnostics);
+        self::discoverSsrComponents($diagnostics);
+    }
+
+    private static function resetState(): void
     {
         self::$routes = [];
         self::$httpRequests = [];
@@ -294,7 +306,10 @@ class AttributeDiscovery
         self::$resourceParts = [];
         self::$payloadBaseMap = [];
         self::$resourceBaseMap = [];
+    }
 
+    private static function discoverPayloadsAndRoutes(BootDiagnostics $diagnostics): void
+    {
         // Runtime discovery: accept payloads from active modules and project src/
         $allPayloadClasses = ClassDiscovery::findClassesWithAttribute(AsPayload::class);
         $httpRequestClasses = array_values(array_filter(
@@ -340,14 +355,12 @@ class AttributeDiscovery
                 $groupKey = $meta['attr']['base'] ?? $className;
                 $requestGroups[$groupKey][] = $meta;
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] AttributeDiscovery payload reflection: " . $e->getMessage());
-                }
+                $diagnostics->skip('AttributeDiscovery', "Payload reflection failed for {$className}: " . $e->getMessage(), $e);
             }
         }
 
         // Process responses before finalizing requests
-        self::processResponseAttributes();
+        self::processResponseAttributes($diagnostics);
 
         // Build flat list of all requests with resolved path/methods, then group by route and apply override chain
         $resolvedCache = [];
@@ -372,9 +385,7 @@ class AttributeDiscovery
                     'tenantScopes' => TenantModuleScopeResolver::scopesForModule($moduleName),
                 ];
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] AttributeDiscovery attribute resolution: " . $e->getMessage());
-                }
+                $diagnostics->invalidUsage('AttributeDiscovery', "Attribute resolution failed for {$className}: " . $e->getMessage(), $e);
             }
         }
 
@@ -446,7 +457,10 @@ class AttributeDiscovery
                 self::$requestClassAliases[$candidate['class']] = $class;
             }
         }
+    }
 
+    private static function discoverHandlers(BootDiagnostics $diagnostics): void
+    {
         // Find handlers and map to requests (Semitexa packages + project App\ handlers)
         $httpHandlerClasses = array_filter(
             ClassDiscovery::findClassesWithAttribute(AsPayloadHandler::class),
@@ -503,18 +517,21 @@ class AttributeDiscovery
                     }
                 }
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] AttributeDiscovery handler reflection: " . $e->getMessage());
-                }
+                $diagnostics->skip('AttributeDiscovery', "Handler reflection failed for {$className}: " . $e->getMessage(), $e);
             }
         }
 
         self::assertPayloadsHaveDiscoveredRoutes();
+    }
 
-        // Discover payload/resource part traits
-        self::discoverPayloadParts();
-        self::discoverResourceParts();
+    private static function discoverParts(BootDiagnostics $diagnostics): void
+    {
+        self::discoverPayloadParts($diagnostics);
+        self::discoverResourceParts($diagnostics);
+    }
 
+    private static function discoverSsrComponents(BootDiagnostics $diagnostics): void
+    {
         // Discover layout slot contributions (optional)
         if (
             class_exists('Semitexa\\Ssr\\Attributes\\AsLayoutSlot')
@@ -549,9 +566,7 @@ class AttributeDiscovery
                         );
                     }
                 } catch (\Throwable $e) {
-                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                        error_log("[Semitexa] AttributeDiscovery layout slot: " . $e->getMessage());
-                    }
+                    $diagnostics->skip('AttributeDiscovery', "Layout slot failed for {$className}: " . $e->getMessage(), $e);
                 }
             }
         }
@@ -583,9 +598,7 @@ class AttributeDiscovery
                         );
                     }
                 } catch (\Throwable $e) {
-                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                        error_log("[Semitexa] AttributeDiscovery data provider: " . $e->getMessage());
-                    }
+                    $diagnostics->skip('AttributeDiscovery', "Data provider failed for {$className}: " . $e->getMessage(), $e);
                 }
             }
         }
@@ -626,9 +639,7 @@ class AttributeDiscovery
                         );
                     }
                 } catch (\Throwable $e) {
-                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                        error_log("[Semitexa] AttributeDiscovery slot resource: " . $e->getMessage());
-                    }
+                    $diagnostics->skip('AttributeDiscovery', "Slot resource failed for {$className}: " . $e->getMessage(), $e);
                 }
             }
         }
@@ -657,13 +668,10 @@ class AttributeDiscovery
                         );
                     }
                 } catch (\Throwable $e) {
-                    if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                        error_log("[Semitexa] AttributeDiscovery slot handler: " . $e->getMessage());
-                    }
+                    $diagnostics->skip('AttributeDiscovery', "Slot handler failed for {$className}: " . $e->getMessage(), $e);
                 }
             }
         }
-
     }
 
     private static function resolveRequestAttributes(string $className, array $metaMap, array &$cache = []): array
@@ -719,7 +727,7 @@ class AttributeDiscovery
         ];
     }
 
-    private static function processResponseAttributes(): void
+    private static function processResponseAttributes(BootDiagnostics $diagnostics): void
     {
         // Runtime discovery: accept resources from active modules and project src/
         $allResourceClasses = ClassDiscovery::findClassesWithAttribute(AsResource::class);
@@ -766,9 +774,7 @@ class AttributeDiscovery
 
                 self::$responseClassAliases[$className] = $className;
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] AttributeDiscovery resource reflection: " . $e->getMessage());
-                }
+                $diagnostics->skip('AttributeDiscovery', "Resource reflection failed for {$className}: " . $e->getMessage(), $e);
             }
         }
 
@@ -962,9 +968,7 @@ class AttributeDiscovery
             $file = (new ReflectionClass($className))->getFileName();
             return $file !== false && self::isProjectRequest($file);
         } catch (\Throwable $e) {
-            if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                error_log("[Semitexa] AttributeDiscovery::isProjectHandler: " . $e->getMessage());
-            }
+            BootDiagnostics::current()->skip('AttributeDiscovery', "isProjectHandler check failed for {$className}: " . $e->getMessage(), $e);
             return false;
         }
     }
@@ -975,9 +979,7 @@ class AttributeDiscovery
             $file = (new ReflectionClass($className))->getFileName();
             return $file !== false && self::isProjectRequest($file);
         } catch (\Throwable $e) {
-            if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                error_log("[Semitexa] AttributeDiscovery::isProjectPayload: " . $e->getMessage());
-            }
+            BootDiagnostics::current()->skip('AttributeDiscovery', "isProjectPayload check failed for {$className}: " . $e->getMessage(), $e);
             return false;
         }
     }
@@ -988,9 +990,7 @@ class AttributeDiscovery
             $file = (new ReflectionClass($className))->getFileName();
             return $file !== false && self::isProjectRequest($file);
         } catch (\Throwable $e) {
-            if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                error_log("[Semitexa] AttributeDiscovery::isProjectResource: " . $e->getMessage());
-            }
+            BootDiagnostics::current()->skip('AttributeDiscovery', "isProjectResource check failed for {$className}: " . $e->getMessage(), $e);
             return false;
         }
     }
@@ -1004,7 +1004,7 @@ class AttributeDiscovery
     /**
      * Discover traits marked with #[AsPayloadPart] from active modules.
      */
-    private static function discoverPayloadParts(): void
+    private static function discoverPayloadParts(BootDiagnostics $diagnostics): void
     {
         $classes = ClassDiscovery::findClassesWithAttribute(AsPayloadPart::class);
         foreach ($classes as $className) {
@@ -1023,17 +1023,12 @@ class AttributeDiscovery
                     self::$payloadParts[$base][] = $className;
                 }
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] AttributeDiscovery payload part: " . $e->getMessage());
-                }
+                $diagnostics->skip('AttributeDiscovery', "Payload part failed for {$className}: " . $e->getMessage(), $e);
             }
         }
     }
 
-    /**
-     * Discover traits marked with #[AsResourcePart] from active modules.
-     */
-    private static function discoverResourceParts(): void
+    private static function discoverResourceParts(BootDiagnostics $diagnostics): void
     {
         $classes = ClassDiscovery::findClassesWithAttribute(AsResourcePart::class);
         foreach ($classes as $className) {
@@ -1052,9 +1047,7 @@ class AttributeDiscovery
                     self::$resourceParts[$base][] = $className;
                 }
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] AttributeDiscovery resource part: " . $e->getMessage());
-                }
+                $diagnostics->skip('AttributeDiscovery', "Resource part failed for {$className}: " . $e->getMessage(), $e);
             }
         }
     }

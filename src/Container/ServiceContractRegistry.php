@@ -6,8 +6,8 @@ namespace Semitexa\Core\Container;
 
 use Semitexa\Core\Attributes\SatisfiesRepositoryContract;
 use Semitexa\Core\Attributes\SatisfiesServiceContract;
+use Semitexa\Core\Discovery\BootDiagnostics;
 use Semitexa\Core\Discovery\ClassDiscovery;
-use Semitexa\Core\Environment;
 use Semitexa\Core\ModuleRegistry;
 
 /**
@@ -104,9 +104,7 @@ final class ServiceContractRegistry
                     $byInterface[$interface][] = $entry;
                 }
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log("[Semitexa] ServiceContractRegistry::build() failed for {$implClass}: " . $e->getMessage());
-                }
+                BootDiagnostics::current()->invalidUsage('ServiceContractRegistry', "build() failed for {$implClass}: " . $e->getMessage(), $e);
                 continue;
             }
         }

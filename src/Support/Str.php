@@ -13,4 +13,17 @@ class Str
 
         return $parts === [] ? '' : implode('', $parts);
     }
+
+    public static function snakeToCamel(string $key): string
+    {
+        $parts = explode('_', $key);
+        $first = array_shift($parts);
+        if ($first === null) {
+            return $key;
+        }
+        foreach ($parts as $i => $part) {
+            $parts[$i] = ucfirst($part);
+        }
+        return $first . implode('', $parts);
+    }
 }

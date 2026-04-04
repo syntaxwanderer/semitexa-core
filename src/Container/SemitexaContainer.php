@@ -19,6 +19,7 @@ use Semitexa\Core\Container\Exception\ContainerSealedException;
 use Semitexa\Core\Container\Exception\InjectionException;
 use Semitexa\Core\Cookie\CookieJarInterface;
 use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Discovery\BootDiagnostics;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Environment;
 use Semitexa\Core\Locale\LocaleContextInterface;
@@ -206,6 +207,8 @@ final class SemitexaContainer implements ContainerInterface
      */
     public function build(): void
     {
+        BootDiagnostics::begin();
+
         // === BootPhase::ClassmapLoad ===
         ClassDiscovery::initialize();
 
@@ -288,6 +291,8 @@ final class SemitexaContainer implements ContainerInterface
 
         // === BootPhase::Ready ===
         $this->sealed = true;
+
+        BootDiagnostics::current()->finalize(strict: (bool) getenv('BOOT_STRICT_MODE'));
     }
 
     /**

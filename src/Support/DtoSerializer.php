@@ -34,7 +34,7 @@ class DtoSerializer
         $reflection = new ReflectionClass($dto);
 
         foreach ($payload as $key => $value) {
-            $setterName = 'set' . ucfirst(self::snakeToCamel($key));
+            $setterName = 'set' . ucfirst(Str::snakeToCamel($key));
             if (!method_exists($dto, $setterName)) {
                 continue;
             }
@@ -48,19 +48,6 @@ class DtoSerializer
         }
 
         return $dto;
-    }
-
-    private static function snakeToCamel(string $key): string
-    {
-        $parts = explode('_', $key);
-        $first = array_shift($parts);
-        if ($first === null) {
-            return $key;
-        }
-        foreach ($parts as $i => $part) {
-            $parts[$i] = ucfirst($part);
-        }
-        return $first . implode('', $parts);
     }
 
     private static function normalize(mixed $value): mixed

@@ -6,6 +6,7 @@ namespace Semitexa\Core\Http;
 
 use Semitexa\Core\Http\Exception\TypeMismatchException;
 use Semitexa\Core\Request;
+use Semitexa\Core\Support\Str;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionUnionType;
@@ -76,21 +77,8 @@ class RequestDtoHydrator
      */
     private static function keyToSetterName(string $key): string
     {
-        $camel = self::snakeToCamel($key);
+        $camel = Str::snakeToCamel($key);
         return 'set' . ucfirst($camel);
-    }
-
-    private static function snakeToCamel(string $key): string
-    {
-        $parts = explode('_', $key);
-        $first = array_shift($parts);
-        if ($first === null) {
-            return $key;
-        }
-        foreach ($parts as $i => $part) {
-            $parts[$i] = ucfirst($part);
-        }
-        return $first . implode('', $parts);
     }
 
     /**
