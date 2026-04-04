@@ -33,9 +33,21 @@ class PayloadHydrator
      *
      * NOTE: This flag is global (static). Only safe to toggle in single-process
      * test environments (PHPUnit CLI). Never enable in production or Swoole workers.
+     *
+     * @throws \LogicException if called inside a Swoole worker (coroutine context)
      */
     public static function enableStrictMode(bool $enabled = true): void
     {
+        if ($enabled
+            && class_exists(\Swoole\Coroutine::class, false)
+            && \Swoole\Coroutine::getCid() >= 0
+        ) {
+            throw new \LogicException(
+                'PayloadHydrator::enableStrictMode() must not be called in Swoole workers. '
+                . 'The flag is process-global and unsafe under concurrency.'
+            );
+        }
+
         self::$strictTypes = $enabled;
     }
 

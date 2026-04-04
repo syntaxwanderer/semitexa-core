@@ -14,6 +14,7 @@ use Semitexa\Core\Locale\DefaultLocaleContext;
 use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Request;
 use Semitexa\Core\HttpResponse;
+use Semitexa\Core\Redis\RedisConnectionPool;
 use Semitexa\Core\Session\RedisSessionHandler;
 use Semitexa\Core\Session\Session;
 use Semitexa\Core\Session\SessionHandlerInterface;
@@ -37,7 +38,7 @@ final class SessionPhase
         private readonly RequestScopedContainer $requestScopedContainer,
         private readonly ?TenancyBootstrapper $tenancy,
     ) {
-        $this->sessionHandler = self::createSessionHandler();
+        $this->sessionHandler = $this->createSessionHandler();
     }
 
     public function execute(RequestLifecycleContext $context): void
@@ -83,7 +84,7 @@ final class SessionPhase
         } catch (\Throwable $e) {
             $this->logSessionPersistenceFailure($e, $request);
             try {
-                $this->sessionHandler = self::createSessionHandler();
+                $this->sessionHandler = $this->createSessionHandler();
                 $session->setHandler($this->sessionHandler);
                 $session->save();
                 $sessionPersisted = true;
@@ -111,11 +112,20 @@ final class SessionPhase
         return $response;
     }
 
-    private static function createSessionHandler(): SessionHandlerInterface
+    private function createSessionHandler(): SessionHandlerInterface
     {
         $redisHost = Environment::getEnvValue('REDIS_HOST');
         if ($redisHost !== null && $redisHost !== '') {
-            return new RedisSessionHandler();
+            if ($this->container->has(RedisConnectionPool::class)) {
+                return new RedisSessionHandler($this->container->get(RedisConnectionPool::class));
+            }
+            // Fallback: create a single-connection pool (CLI/tests without container bootstrap)
+            $pool = new RedisConnectionPool(1, [
+                'host' => $redisHost,
+                'port' => (int) Environment::getEnvValue('REDIS_PORT', '6379'),
+                'password' => Environment::getEnvValue('REDIS_PASSWORD', ''),
+            ]);
+            return new RedisSessionHandler($pool);
         }
         return new SwooleTableSessionHandler();
     }

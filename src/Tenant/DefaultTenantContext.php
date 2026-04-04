@@ -15,6 +15,9 @@ use Semitexa\Core\Tenant\Layer\EnvironmentValue;
 
 final class DefaultTenantContext implements TenantContextInterface
 {
+    private const CTX_KEY = '__tenant_context';
+
+    /** @worker-scoped CLI/non-coroutine fallback only. */
     private static ?self $instance = null;
 
     private array $layers = [];
@@ -25,6 +28,11 @@ final class DefaultTenantContext implements TenantContextInterface
 
     public static function getInstance(): self
     {
+        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
+            $ctx = \Swoole\Coroutine::getContext();
+            return $ctx[self::CTX_KEY] ??= new self();
+        }
+
         return self::$instance ??= new self();
     }
 
@@ -53,11 +61,15 @@ final class DefaultTenantContext implements TenantContextInterface
 
     public static function get(): ?self
     {
+        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
+            return \Swoole\Coroutine::getContext()[self::CTX_KEY] ?? null;
+        }
+
         return self::$instance;
     }
 
     public static function getOrFail(): self
     {
-        return self::$instance ?? self::getInstance();
+        return self::get() ?? self::getInstance();
     }
 }

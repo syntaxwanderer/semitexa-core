@@ -34,6 +34,7 @@ readonly class Environment
         public string $corsAllowMethods,
         public string $corsAllowHeaders,
         public bool $corsAllowCredentials,
+        public int $redisPoolSize,
     ) {}
     
     public static function create(): self
@@ -68,6 +69,7 @@ readonly class Environment
             corsAllowMethods: $get('CORS_ALLOW_METHODS', 'GET, POST, PUT, DELETE, OPTIONS'),
             corsAllowHeaders: $get('CORS_ALLOW_HEADERS', 'Content-Type, Authorization'),
             corsAllowCredentials: (bool) $get('CORS_ALLOW_CREDENTIALS', '0'),
+            redisPoolSize: (int) $get('REDIS_POOL_SIZE', '16'),
         );
     }
     
@@ -151,6 +153,7 @@ readonly class Environment
             'CORS_ALLOW_METHODS' => $this->corsAllowMethods,
             'CORS_ALLOW_HEADERS' => $this->corsAllowHeaders,
             'CORS_ALLOW_CREDENTIALS' => $this->corsAllowCredentials ? '1' : '0',
+            'REDIS_POOL_SIZE' => (string) $this->redisPoolSize,
             default => $default
         };
     }
