@@ -488,7 +488,7 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attributes\AsLayoutSlot $meta */
+                        /** @var \Semitexa\Ssr\Attribute\AsLayoutSlot $meta */
                         $meta = $attr->newInstance();
                         $handle = $meta->handle;
                         $slot = $meta->slot;
@@ -562,7 +562,7 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotResourceAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attributes\AsSlotResource $meta */
+                        /** @var \Semitexa\Ssr\Attribute\AsSlotResource $meta */
                         $meta = $attr->newInstance();
                         $template = EnvValueResolver::resolve($meta->template);
                         $context = EnvValueResolver::resolve($meta->context);
@@ -603,7 +603,7 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotHandlerAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attributes\AsSlotHandler $meta */
+                        /** @var \Semitexa\Ssr\Attribute\AsSlotHandler $meta */
                         $meta = $attr->newInstance();
                         \Semitexa\Ssr\Layout\SlotHandlerRegistry::register(
                             slotClass: $meta->slot,

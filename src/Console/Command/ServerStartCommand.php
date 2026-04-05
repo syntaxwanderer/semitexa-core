@@ -366,11 +366,11 @@ class ServerStartCommand extends BaseCommand
         }
 
         if ($reachable) {
-            $io->success('Ollama: reachable. Run `docker compose exec ollama ollama pull gemma3:4b` to pull a model if you have not already.');
+            $io->success('Ollama: reachable. Run `docker compose exec ollama ollama pull gemma4:e4b` to pull a model if you have not already.');
         } else {
             $io->warning([
                 'Ollama: not reachable after ' . $maxAttempts . ' attempts (container may still be starting).',
-                'Try again in a few seconds. Then pull a model: docker compose exec ollama ollama pull gemma3:4b',
+                'Try again in a few seconds. Then pull a model: docker compose exec ollama ollama pull gemma4:e4b',
             ]);
         }
     }
