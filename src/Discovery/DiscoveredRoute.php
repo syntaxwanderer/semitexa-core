@@ -14,7 +14,7 @@ final readonly class DiscoveredRoute
 {
     /**
      * @param list<string>        $methods
-     * @param list<string>        $handlers
+     * @param list<array<string, mixed>> $handlers
      * @param list<string>|null   $produces
      * @param list<string>|null   $consumes
      * @param array<string, string> $requirements
@@ -63,7 +63,7 @@ final readonly class DiscoveredRoute
             name: is_string($route['name'] ?? null) ? $route['name'] : null,
             requestClass: (string) ($route['class'] ?? $route['requestClass'] ?? ''),
             responseClass: is_string($route['responseClass'] ?? null) ? $route['responseClass'] : null,
-            handlers: array_values(array_filter((array) ($route['handlers'] ?? []), 'is_string')),
+            handlers: array_values(array_filter((array) ($route['handlers'] ?? []), 'is_array')),
             type: (string) ($route['type'] ?? 'http_request'),
             produces: is_array($route['produces'] ?? null) ? array_values(array_filter($route['produces'], 'is_string')) : null,
             consumes: is_array($route['consumes'] ?? null) ? array_values(array_filter($route['consumes'], 'is_string')) : null,
