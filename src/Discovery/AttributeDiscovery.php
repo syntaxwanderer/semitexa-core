@@ -411,6 +411,7 @@ class AttributeDiscovery
                 'methods' => $resolved['methods'],
                 'name' => $resolved['name'],
                 'class' => $class,
+                'responseClass' => $resolved['responseWith'] ?? null,
                 'method' => '__invoke',
                 'requirements' => $resolved['requirements'],
                 'defaults' => $resolved['defaults'],
