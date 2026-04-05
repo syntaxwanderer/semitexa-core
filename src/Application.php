@@ -6,6 +6,8 @@ namespace Semitexa\Core;
 
 use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Container\RequestScopedContainer;
+use Semitexa\Core\Container\SemitexaContainer;
+use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Event\EventDispatcherInterface;
 use Semitexa\Core\Lifecycle\LocalePhase;
 use Semitexa\Core\Lifecycle\LifecycleComponentRegistry;
@@ -14,7 +16,6 @@ use Semitexa\Core\Lifecycle\RoutePhase;
 use Semitexa\Core\Lifecycle\SessionPhase;
 use Semitexa\Core\Lifecycle\TenancyPhase;
 use Semitexa\Core\Support\CoroutineLocal;
-use Psr\Container\ContainerInterface;
 
 /**
  * Minimal Semitexa Application
@@ -32,7 +33,7 @@ class Application
         }
     }
 
-    private ContainerInterface $container {
+    private SemitexaContainer $container {
         get {
             return $this->container;
         }
@@ -49,7 +50,7 @@ class Application
     private LocalePhase $localePhase;
     private RoutePhase $routePhase;
 
-    public function __construct(?ContainerInterface $container = null)
+    public function __construct(?SemitexaContainer $container = null)
     {
         $this->container = $container ?? ContainerFactory::get();
         $this->requestScopedContainer = ContainerFactory::createRequestScoped();
@@ -61,7 +62,7 @@ class Application
             ? $this->container->get(EventDispatcherInterface::class)
             : null;
 
-        $classDiscovery = $this->container->getOrNull(\Semitexa\Core\Discovery\ClassDiscovery::class);
+        $classDiscovery = $this->container->getOrNull(ClassDiscovery::class);
 
         $tenancy = $componentRegistry->createTenancyBootstrapper(
             classDiscovery: $classDiscovery,

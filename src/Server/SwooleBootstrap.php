@@ -80,7 +80,7 @@ class SwooleBootstrap
         );
         $lifecycleInvoker->invokePhase(ServerLifecyclePhase::PreStart, $bootstrapContext, false);
 
-        $server->on(SwooleEvent::WorkerStart->value, function (Server $server, int $workerId) use ($bootstrapState, $lifecycleInvoker, $lifecycleRegistry) {
+        $server->on(SwooleEvent::WorkerStart->value, function (Server $server, int $workerId) use ($bootstrapState, $lifecycleInvoker) {
             self::syncInheritedComposerAutoloader();
             Environment::syncEnvFromFiles();
             $workerEnv = Environment::create();

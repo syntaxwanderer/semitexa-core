@@ -70,6 +70,16 @@ class RequestScopedContainer implements ContainerInterface
         if (isset($this->requestScopedCache[$id])) {
             return true;
         }
+        // These IDs are exclusively managed by request scope; never delegate to the
+        // wrapped container to avoid a has()-then-get() mismatch for callers that
+        // rely on has() as a guard before calling get().
+        if (
+            $id === SessionInterface::class
+            || $id === CookieJarInterface::class
+            || $id === Request::class
+        ) {
+            return false;
+        }
         return $this->container->has($id);
     }
 

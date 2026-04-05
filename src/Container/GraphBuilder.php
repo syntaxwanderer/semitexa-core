@@ -370,6 +370,9 @@ final class GraphBuilder
             }
         }
         $instance = $args !== [] ? $ref->newInstanceArgs($args) : $ref->newInstance();
+        if ($injectionAnalyzer !== null) {
+            $injectionAnalyzer->injectConfigProperties($instance, $class, $ref);
+        }
         $this->injectPropertiesInto($instance, $class, $injections, $readonlyInstances, $idToClass, []);
         return $instance;
     }
