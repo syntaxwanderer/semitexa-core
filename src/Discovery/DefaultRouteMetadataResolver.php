@@ -10,32 +10,29 @@ use Semitexa\Core\Contract\RouteMetadataResolverInterface;
 /**
  * Default implementation of RouteMetadataResolverInterface.
  *
- * Converts the internally-discovered route arrays produced by AttributeDiscovery
- * into typed ResolvedRouteMetadata DTOs.  No reflection work is performed here
- * beyond reading the already-enriched route array; discovery caches in
- * AttributeDiscovery are the source of truth.
+ * Converts the DiscoveredRoute DTO into a typed ResolvedRouteMetadata DTO.
+ * No reflection work is performed here beyond reading the route properties.
  *
  * Packages that need to attach additional route-level metadata (e.g. semitexa-api
  * for ExternalApi / ApiVersion markers) should provide their own implementation
- * via #[SatisfiesServiceContract(of: RouteMetadataResolverInterface::class)].
+ * via #[SatisfiesServiceContract(of: RouteMetadataResolverInterface::class)] to enrich
+ * the metadata with extension data.
  */
 #[SatisfiesServiceContract(of: RouteMetadataResolverInterface::class)]
 final class DefaultRouteMetadataResolver implements RouteMetadataResolverInterface
 {
-    public function resolve(array $route): ResolvedRouteMetadata
+    public function resolve(DiscoveredRoute $route): ResolvedRouteMetadata
     {
-        $methods = $route['methods'] ?? (isset($route['method']) ? [$route['method']] : ['GET']);
-
         return new ResolvedRouteMetadata(
-            path:          $route['path'] ?? '',
-            name:          $route['name'] ?? '',
-            methods:       $methods,
-            requestClass:  $route['class'] ?? '',
-            responseClass: $route['responseClass'] ?? '',
-            produces:      $route['produces'] ?? null,
-            consumes:      $route['consumes'] ?? null,
-            handlers:      $route['handlers'] ?? [],
-            requirements:  $route['requirements'] ?? [],
+            path:          $route->path,
+            name:          $route->name ?? '',
+            methods:       $route->methods,
+            requestClass:  $route->requestClass,
+            responseClass: $route->responseClass ?? '',
+            produces:      $route->produces,
+            consumes:      $route->consumes,
+            handlers:      $route->handlers,
+            requirements:  $route->requirements,
             extensions:    [],
         );
     }

@@ -9,6 +9,8 @@ use Semitexa\Core\Cookie\CookieJarInterface;
 use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Request;
 use Semitexa\Core\Session\SessionInterface;
+use Semitexa\Core\Container\Exception\ExecutionContextNotReadyException;
+use Semitexa\Core\Exception\ContainerException;
 use Semitexa\Core\Tenant\TenantContextInterface;
 use Psr\Container\ContainerInterface;
 
@@ -21,6 +23,7 @@ class RequestScopedContainer implements ContainerInterface
 {
     private ContainerInterface $container;
     private array $requestScopedCache = [];
+    private bool $executionContextSet = false;
 
     public function __construct(ContainerInterface $container)
     {
@@ -58,6 +61,7 @@ class RequestScopedContainer implements ContainerInterface
                 authContext: $authContext instanceof AuthContextInterface ? $authContext : null,
                 localeContext: $localeContext instanceof LocaleContextInterface ? $localeContext : null,
             ));
+            $this->executionContextSet = true;
         }
     }
 
@@ -90,8 +94,14 @@ class RequestScopedContainer implements ContainerInterface
             || $id === CookieJarInterface::class
             || $id === Request::class
         ) {
-            throw new \RuntimeException("{$id} is not set. Ensure Application initializes session, cookies, and request at request start.");
+            throw new ContainerException("{$id} is not set. Ensure Application initializes session, cookies, and request at request start.");
         }
+
+        if (!$this->executionContextSet && $this->container instanceof SemitexaContainer
+            && $this->container->isExecutionScoped($id)) {
+            throw new ExecutionContextNotReadyException($id);
+        }
+
         return $this->container->get($id);
     }
 
@@ -101,5 +111,9 @@ class RequestScopedContainer implements ContainerInterface
     public function reset(): void
     {
         $this->requestScopedCache = [];
+        $this->executionContextSet = false;
+        if ($this->container instanceof SemitexaContainer) {
+            $this->container->clearExecutionContext();
+        }
     }
 }

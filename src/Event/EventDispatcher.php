@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Event;
 
 use Semitexa\Core\Attribute\InjectAsReadonly;
+use Semitexa\Core\Exception\ConfigurationException;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Queue\QueueConfig;
@@ -83,7 +84,7 @@ final class EventDispatcher implements EventDispatcherInterface
         }
 
         if (!method_exists($listener, 'handle')) {
-            throw new \LogicException(sprintf(
+            throw new ConfigurationException(sprintf(
                 'Event listener %s must have a handle() method.',
                 $meta['class'],
             ));

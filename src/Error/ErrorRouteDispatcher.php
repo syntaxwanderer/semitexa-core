@@ -7,9 +7,12 @@ namespace Semitexa\Core\Error;
 use Psr\Container\ContainerInterface;
 use Semitexa\Auth\AuthBootstrapper;
 use Semitexa\Core\Container\RequestScopedContainer;
-use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Discovery\DiscoveredRoute;
+use Semitexa\Core\Discovery\HandlerRegistry;
+use Semitexa\Core\Discovery\RouteRegistry;
 use Semitexa\Core\Environment;
 use Semitexa\Core\Exception\DomainException;
+use Semitexa\Core\Exception\PipelineException;
 use Semitexa\Core\Http\ErrorRenderer;
 use Semitexa\Core\Http\HttpStatus;
 use Semitexa\Core\Pipeline\RouteExecutor;
@@ -24,15 +27,14 @@ final class ErrorRouteDispatcher
     private \Closure $routeExecutor;
 
     public function __construct(
-        private readonly AttributeDiscovery $attributeDiscovery,
+        private readonly RouteRegistry $routeRegistry,
         private readonly RequestScopedContainer $requestScopedContainer,
         private readonly ContainerInterface $container,
         private readonly ?AuthBootstrapper $authBootstrapper,
         private readonly Environment $environment,
         ?\Closure $routeExecutor = null,
     ) {
-        $defaultRouteExecutor = function (array $route, Request $request): HttpResponse {
-            /** @var array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string, consumes?: list<string>|null, produces?: list<string>|null} $route */
+        $defaultRouteExecutor = function (DiscoveredRoute $route, Request $request): HttpResponse {
             $executor = new RouteExecutor(
                 $this->requestScopedContainer,
                 $this->container,
@@ -93,11 +95,18 @@ final class ErrorRouteDispatcher
             );
         }
 
-        $route = $this->attributeDiscovery->findRouteByName($routeName);
+        try {
+            $handlerRegistry = $this->container->has(HandlerRegistry::class)
+                ? $this->container->get(HandlerRegistry::class)
+                : null;
+            $route = $this->routeRegistry->findByNameTyped($routeName, $handlerRegistry);
+        } catch (\Throwable) {
+            return ErrorRenderer::renderStatus($context, $request);
+        }
+
         if ($route === null) {
             return ErrorRenderer::renderStatus($context, $request);
         }
-        /** @var array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string, consumes?: list<string>|null, produces?: list<string>|null} $route */
 
         $state = $this->getDispatchState();
         if (!$state->enter($routeName)) {
@@ -114,7 +123,7 @@ final class ErrorRouteDispatcher
 
             $response = ($this->routeExecutor)($route, $request);
             if (!$response instanceof HttpResponse) {
-                throw new \RuntimeException('Error route executor must return an instance of HttpResponse.');
+                throw new PipelineException('Error route executor must return an instance of HttpResponse.');
             }
 
             return $this->withStatusCode($response, $context->statusCode);

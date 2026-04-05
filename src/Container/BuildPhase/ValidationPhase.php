@@ -1,0 +1,68 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Semitexa\Core\Container\BuildPhase;
+
+use Semitexa\Core\Container\Exception\InjectionException;
+use Semitexa\Core\Container\SemitexaContainer;
+
+/**
+ * Validates that all injection bindings can be resolved at boot time.
+ * Catches configuration errors early instead of at request time.
+ *
+ * Preconditions: all build phases complete — injections, idToClass, instanceStore fully populated.
+ * Postconditions: none (validation only — throws on unresolvable binding).
+ */
+final class ValidationPhase implements BuildPhaseInterface
+{
+    public function execute(BuildContext $context): void
+    {
+        foreach ($context->injections as $class => $properties) {
+            foreach ($properties as $propName => $info) {
+                $kind = $info['kind'];
+                $typeName = $info['type'];
+
+                $resolved = match ($kind) {
+                    'factory' => $context->instanceStore->factories[$typeName] ?? null,
+                    'readonly' => $context->instanceStore->readonly[$typeName]
+                        ?? $context->instanceStore->readonly[$context->idToClass[$typeName] ?? '']
+                        ?? null,
+                    'mutable' => $context->instanceStore->prototypes[$typeName]
+                        ?? $context->instanceStore->prototypes[$context->idToClass[$typeName] ?? '']
+                        ?? null,
+                    default => null,
+                };
+
+                if ($resolved !== null) {
+                    continue;
+                }
+
+                if ($kind === 'mutable' && in_array($typeName, SemitexaContainer::EXECUTION_CONTEXT_TYPES, true)) {
+                    continue;
+                }
+
+                if ($kind === 'mutable' && isset($context->executionScopedClasses[$class])) {
+                    $protoClass = $context->idToClass[$typeName] ?? $typeName;
+                    if (isset($context->instanceStore->prototypes[$protoClass]) || isset($context->instanceStore->prototypes[$typeName])) {
+                        continue;
+                    }
+                }
+
+                throw new InjectionException(
+                    targetClass: $class,
+                    propertyName: $propName,
+                    propertyType: $typeName,
+                    injectionKind: $kind,
+                    message: "Boot validation failed: {$class}::\${$propName} "
+                        . "(type: {$typeName}, kind: {$kind}) has no binding.",
+                );
+            }
+        }
+    }
+
+    public function name(): string
+    {
+        return 'Validation';
+    }
+}

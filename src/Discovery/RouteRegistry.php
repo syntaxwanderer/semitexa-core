@@ -127,6 +127,46 @@ class RouteRegistry
     }
 
     /**
+     * Find a typed route by path and method.
+     * When a HandlerRegistry is provided, the returned route includes resolved handlers.
+     */
+    public function findRouteTyped(string $path, string $method = 'GET', ?HandlerRegistry $handlerRegistry = null): ?DiscoveredRoute
+    {
+        $route = $this->find($path, $method);
+        if ($route === null) {
+            return null;
+        }
+
+        if ($handlerRegistry !== null) {
+            $requestClass = is_string($route['class'] ?? null) ? $route['class'] : '';
+            $responseClass = is_string($route['responseClass'] ?? null) ? $route['responseClass'] : null;
+            $route['handlers'] = $handlerRegistry->findHandlers($requestClass, $responseClass);
+        }
+
+        return DiscoveredRoute::fromArray($route);
+    }
+
+    /**
+     * Find a typed route by name.
+     * When a HandlerRegistry is provided, the returned route includes resolved handlers.
+     */
+    public function findByNameTyped(string $name, ?HandlerRegistry $handlerRegistry = null): ?DiscoveredRoute
+    {
+        $route = $this->findByName($name);
+        if ($route === null) {
+            return null;
+        }
+
+        if ($handlerRegistry !== null) {
+            $requestClass = is_string($route['class'] ?? null) ? $route['class'] : '';
+            $responseClass = is_string($route['responseClass'] ?? null) ? $route['responseClass'] : null;
+            $route['handlers'] = $handlerRegistry->findHandlers($requestClass, $responseClass);
+        }
+
+        return DiscoveredRoute::fromArray($route);
+    }
+
+    /**
      * Get all raw routes.
      *
      * @return list<array<string, mixed>>

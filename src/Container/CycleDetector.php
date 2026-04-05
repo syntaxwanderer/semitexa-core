@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Container;
 
 use Semitexa\Core\Container\Exception\CircularDependencyException;
+use Semitexa\Core\Exception\BootstrapException;
 
 /**
  * DFS-based circular dependency detection for the container's dependency graph.
@@ -92,7 +93,7 @@ final class CycleDetector
                 // Found a cycle — extract the cycle path
                 $cycleStart = array_search($neighbor, $path, true);
                 if ($cycleStart === false) {
-                    throw new \LogicException("Cycle detection invariant violated: {$neighbor} is gray but missing from path.");
+                    throw new BootstrapException("Cycle detection invariant violated: {$neighbor} is gray but missing from path.");
                 }
                 $chain = array_slice($path, $cycleStart);
                 $chain[] = $neighbor;

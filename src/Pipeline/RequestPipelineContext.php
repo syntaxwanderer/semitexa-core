@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Pipeline;
 
 use Semitexa\Core\Auth\AuthResult;
+use Semitexa\Core\Discovery\DiscoveredRoute;
 use Semitexa\Core\Discovery\ResolvedRouteMetadata;
 use Semitexa\Core\Request;
 
@@ -26,7 +27,7 @@ class RequestPipelineContext
 
     public function __construct(
         public readonly object $requestDto,
-        public readonly array $route,
+        public readonly DiscoveredRoute $route,
         public readonly Request $request,
         ?object $resourceDto = null,
         /** Set by Application when auth package is present so AuthCheckListener can delegate to AuthBootstrapper. */
