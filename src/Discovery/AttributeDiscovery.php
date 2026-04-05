@@ -18,6 +18,7 @@ use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Pipeline\HandlerReflectionCache;
 use Semitexa\Core\Support\TenantModuleScopeResolver;
 use ReflectionClass;
+use Semitexa\Core\Exception\ConfigurationException;
 
 /**
  * Discovers and caches attributes from PHP classes
@@ -43,11 +44,35 @@ class AttributeDiscovery
     private array $resourceBaseMap = [];
     private bool $initialized = false;
 
+    private readonly HandlerRegistry $handlerRegistry;
+    private readonly PayloadPartRegistry $payloadPartRegistry;
+
     public function __construct(
         private readonly ClassDiscovery $classDiscovery,
         private readonly ModuleRegistry $moduleRegistry,
         private readonly RouteRegistry $routeRegistry,
-    ) {}
+        ?HandlerRegistry $handlerRegistry = null,
+        ?PayloadPartRegistry $payloadPartRegistry = null,
+    ) {
+        $this->handlerRegistry = $handlerRegistry ?? new HandlerRegistry();
+        $this->payloadPartRegistry = $payloadPartRegistry ?? new PayloadPartRegistry();
+    }
+
+    /**
+     * Get the handler registry populated during discovery.
+     */
+    public function getHandlerRegistry(): HandlerRegistry
+    {
+        return $this->handlerRegistry;
+    }
+
+    /**
+     * Get the payload part registry populated during discovery.
+     */
+    public function getPayloadPartRegistry(): PayloadPartRegistry
+    {
+        return $this->payloadPartRegistry;
+    }
 
     /**
      * Initialize the discovery system
@@ -178,7 +203,7 @@ class AttributeDiscovery
         }
         if ($missing !== []) {
             $list = implode(', ', array_unique($missing));
-            throw new \RuntimeException(
+            throw new ConfigurationException(
                 "Payload(s) referenced by handlers have no discovered route. Missing: {$list}. " .
                 "Ensure the payload class has #[AsPayload] and belongs to an active module or project src/."
             );
@@ -290,6 +315,7 @@ class AttributeDiscovery
                 $requestMeta[$className] = $meta;
                 if ($meta['attr']['base'] !== null) {
                     $this->payloadBaseMap[$className] = $meta['attr']['base'];
+                    $this->payloadPartRegistry->registerPayloadBase($className, $meta['attr']['base']);
                 }
                 $groupKey = $meta['attr']['base'] ?? $className;
                 $requestGroups[$groupKey][] = $meta;
@@ -447,12 +473,15 @@ class AttributeDiscovery
                     $this->handlersByPayloadAndResource[$key][] = $handlerMeta;
                     $this->httpHandlers[$class->getName()] = $handlerMeta;
 
+                    // Dual-write to HandlerRegistry
+                    $this->handlerRegistry->register($payloadClass, $resourceClass, $handlerMeta);
+
                     // Warm reflection cache for TypedHandlerInterface handlers
                     if ($class->implementsInterface(TypedHandlerInterface::class)) {
                         try {
                             HandlerReflectionCache::warm($class->getName());
                         } catch (\LogicException $e) {
-                            throw new \LogicException(
+                            throw new ConfigurationException(
                                 "Failed to warm reflection cache for TypedHandlerInterface handler {$class->getName()}: " . $e->getMessage(),
                                 0,
                                 $e
@@ -532,7 +561,7 @@ class AttributeDiscovery
                     foreach ($attrs as $attr) {
                         $meta = $attr->newInstance();
                         if (!property_exists($meta, 'slot') || $meta->slot === null || $meta->slot === '') {
-                            throw new \RuntimeException("AsDataProvider on {$className} is missing slot.");
+                            throw new ConfigurationException("AsDataProvider on {$className} is missing slot.");
                         }
                         $handles = property_exists($meta, 'handles') && is_array($meta->handles) ? $meta->handles : [];
                         \Semitexa\Ssr\Application\Service\DataProviderRegistry::register(
@@ -624,7 +653,7 @@ class AttributeDiscovery
             return $cache[$className];
         }
         if (!isset($metaMap[$className])) {
-            throw new \RuntimeException("Request metadata missing for {$className}");
+            throw new ConfigurationException("Request metadata missing for {$className}");
         }
         $meta = $metaMap[$className];
         $attr = $meta['attr'];
@@ -656,7 +685,7 @@ class AttributeDiscovery
     private static function applyRequestDefaults(array $attr, string $shortName, string $className): array
     {
         if ($attr['path'] === null) {
-            throw new \RuntimeException("Request {$className} must define a path");
+            throw new ConfigurationException("Request {$className} must define a path");
         }
         return [
             'path' => $attr['path'],
@@ -714,6 +743,7 @@ class AttributeDiscovery
                 $responseMeta[$className] = $meta;
                 if ($meta['attr']['base'] !== null) {
                     $this->resourceBaseMap[$className] = $meta['attr']['base'];
+                    $this->payloadPartRegistry->registerResourceBase($className, $meta['attr']['base']);
                 }
                 $groupKey = $meta['attr']['base'] ?? $className;
                 $responseGroups[$groupKey][] = $meta;
@@ -748,7 +778,7 @@ class AttributeDiscovery
             return $cache[$className];
         }
         if (!isset($metaMap[$className])) {
-            throw new \RuntimeException("Response metadata missing for {$className}");
+            throw new ConfigurationException("Response metadata missing for {$className}");
         }
         $meta = $metaMap[$className];
         $attr = $meta['attr'];
@@ -856,14 +886,14 @@ class AttributeDiscovery
                 continue;
             }
             if ($head === null) {
-                throw new \RuntimeException(
+                throw new ConfigurationException(
                     "Request {$c['class']} declares overrides of {$overrides}, but there is no request for this route to override. " .
                     "Remove the overrides attribute (registry is the single source of truth; registry payloads extend module base)."
                 );
             }
             $headClass = $head['class'];
             if ($overrides !== $headClass) {
-                throw new \RuntimeException(
+                throw new ConfigurationException(
                     "Request override chain violation: {$c['class']} tries to override {$overrides}, but the current head for this route is {$headClass}. " .
                     "You can only override the current head. Use overrides: {$headClass}::class to extend the chain."
                 );
@@ -966,6 +996,7 @@ class AttributeDiscovery
                     $instance = $attr->newInstance();
                     $base = ltrim($instance->base, '\\');
                     $this->payloadParts[$base][] = $className;
+                    $this->payloadPartRegistry->registerPayloadPart($base, $className);
                 }
             } catch (\Throwable $e) {
                 $diagnostics->skip('AttributeDiscovery', "Payload part failed for {$className}: " . $e->getMessage(), $e);
@@ -990,6 +1021,7 @@ class AttributeDiscovery
                     $instance = $attr->newInstance();
                     $base = ltrim($instance->base, '\\');
                     $this->resourceParts[$base][] = $className;
+                    $this->payloadPartRegistry->registerResourcePart($base, $className);
                 }
             } catch (\Throwable $e) {
                 $diagnostics->skip('AttributeDiscovery', "Resource part failed for {$className}: " . $e->getMessage(), $e);

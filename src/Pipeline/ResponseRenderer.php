@@ -11,15 +11,14 @@ use Semitexa\Core\Http\ContentNegotiator;
 use Semitexa\Core\Http\HttpStatus;
 use Semitexa\Core\Http\Response\ResponseFormat;
 use Semitexa\Core\Http\Exception\NegotiationFailedException;
+use Semitexa\Core\Discovery\DiscoveredRoute;
 
 final class ResponseRenderer
 {
     /**
      * Render the resource DTO into a response based on route metadata and content negotiation.
-     *
-     * @param array{produces?: list<string>|null} $route
      */
-    public function render(object $resDto, ?object $reqDto, Request $request, array $route): object
+    public function render(object $resDto, ?object $reqDto, Request $request, DiscoveredRoute $route): object
     {
         // Redirect short-circuit: if the resource has a redirect URL, skip rendering
         if (method_exists($resDto, 'getRedirectUrl') && $resDto->getRedirectUrl() !== null) {
@@ -64,7 +63,7 @@ final class ResponseRenderer
         }
 
         // Negotiate format when produces is set on the route and we have a render handle
-        $produces = $route['produces'] ?? null;
+        $produces = $route->produces;
         if ($handle && !$this->wantsPageDocumentJson($request) && $produces !== null && $produces !== []) {
             try {
                 $defaultKey = $format !== null ? self::formatEnumToKey($format) : 'json';
@@ -93,13 +92,12 @@ final class ResponseRenderer
     }
 
     /**
-     * @param array<string, mixed> $route
      * @param array<string, mixed> $context
      */
     private function renderJsonResponse(
         object $resDto,
         Request $request,
-        array $route,
+        DiscoveredRoute $route,
         ?string $handle,
         array $context,
     ): object {
@@ -270,10 +268,9 @@ final class ResponseRenderer
 
     /**
      * @param array<string, mixed> $context
-     * @param array<string, mixed> $route
      * @return array<string, mixed>
      */
-    private function withPageDocumentContext(array $context, Request $request, array $route): array
+    private function withPageDocumentContext(array $context, Request $request, DiscoveredRoute $route): array
     {
         $htmlQuery = $request->query;
         unset($htmlQuery['_format'], $htmlQuery['_slot'], $htmlQuery['_expand']);
@@ -293,13 +290,12 @@ final class ResponseRenderer
     }
 
     /**
-     * @param array<string,mixed> $route
      * @param array<string,mixed> $query
      * @return list<array{type:string,href:string}>
      */
-    private function buildPageAlternates(array $route, string $path, array $query): array
+    private function buildPageAlternates(DiscoveredRoute $route, string $path, array $query): array
     {
-        $produces = $route['produces'] ?? null;
+        $produces = $route->produces;
         if (!is_array($produces) || $produces === []) {
             return [];
         }

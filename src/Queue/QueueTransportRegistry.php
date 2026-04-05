@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Queue;
 
+use Semitexa\Core\Exception\ConfigurationException;
 use Semitexa\Core\Queue\Transport\InMemoryTransportFactory;
 use Semitexa\Core\Queue\Transport\RabbitMqTransportFactory;
 
@@ -59,7 +60,7 @@ class QueueTransportRegistry
 
         if (!isset(self::$instances[$key])) {
             if (!isset(self::$factories[$key])) {
-                throw new \RuntimeException("Queue transport '{$name}' is not registered");
+                throw new ConfigurationException("Queue transport '{$name}' is not registered");
             }
             self::$instances[$key] = self::$factories[$key]->create();
         }

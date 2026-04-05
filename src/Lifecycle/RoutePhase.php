@@ -7,12 +7,15 @@ namespace Semitexa\Core\Lifecycle;
 use Psr\Container\ContainerInterface;
 use Semitexa\Auth\AuthBootstrapper;
 use Semitexa\Core\Container\RequestScopedContainer;
-use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Discovery\DiscoveredRoute;
+use Semitexa\Core\Discovery\HandlerRegistry;
+use Semitexa\Core\Discovery\RouteRegistry;
 use Semitexa\Core\Environment;
 use Semitexa\Core\Error\ErrorRouteDispatcher;
 use Semitexa\Core\Http\RouteType;
 use Semitexa\Core\Pipeline\RouteExecutor;
 use Semitexa\Core\Request;
+use Semitexa\Core\Exception\RoutingException;
 use Semitexa\Core\HttpResponse;
 
 /**
@@ -24,7 +27,7 @@ final class RoutePhase
     public const ROUTE_NAME_404 = ErrorRouteDispatcher::ROUTE_NAME_404;
     public const ROUTE_NAME_500 = ErrorRouteDispatcher::ROUTE_NAME_500;
 
-    private readonly AttributeDiscovery $attributeDiscovery;
+    private readonly RouteRegistry $routeRegistry;
     private readonly ErrorRouteDispatcher $errorRouteDispatcher;
 
     public function __construct(
@@ -33,11 +36,11 @@ final class RoutePhase
         private readonly ?AuthBootstrapper $authBootstrapper,
         private readonly Environment $environment,
     ) {
-        /** @var AttributeDiscovery $attributeDiscovery */
-        $attributeDiscovery = $this->container->get(AttributeDiscovery::class);
-        $this->attributeDiscovery = $attributeDiscovery;
+        /** @var RouteRegistry $routeRegistry */
+        $routeRegistry = $this->container->get(RouteRegistry::class);
+        $this->routeRegistry = $routeRegistry;
         $this->errorRouteDispatcher = new ErrorRouteDispatcher(
-            $this->attributeDiscovery,
+            $this->routeRegistry,
             $this->requestScopedContainer,
             $this->container,
             $this->authBootstrapper,
@@ -50,19 +53,21 @@ final class RoutePhase
         $request = $context->request;
         $routingPath = $context->getRoutingPath();
 
-        $route = $this->attributeDiscovery->findRoute($routingPath, $request->getMethod());
+        $handlerRegistry = $this->container->has(HandlerRegistry::class)
+            ? $this->container->get(HandlerRegistry::class)
+            : null;
+
+        $route = $this->routeRegistry->findRouteTyped($routingPath, $request->getMethod(), $handlerRegistry);
 
         if ($route) {
-            /** @var array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string} $route */
             return $this->handleRoute($route, $request);
         }
 
         // Try alternate root path normalization ('/' vs '')
         if ($routingPath === '/' || $routingPath === '') {
             $altPath = $routingPath === '/' ? '' : '/';
-            $route = $this->attributeDiscovery->findRoute($altPath, $request->getMethod());
+            $route = $this->routeRegistry->findRouteTyped($altPath, $request->getMethod(), $handlerRegistry);
             if ($route) {
-                /** @var array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string} $route */
                 return $this->handleRoute($route, $request);
             }
         }
@@ -70,15 +75,10 @@ final class RoutePhase
         return $this->getNotFoundResponse($request);
     }
 
-    /**
-     * @param array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string} $route
-     */
-    private function handleRoute(array $route, Request $request): HttpResponse
+    private function handleRoute(DiscoveredRoute $route, Request $request): HttpResponse
     {
         try {
-            $type = $route['type'] ?? null;
-
-            if ($type === RouteType::HttpRequest->value) {
+            if ($route->type === RouteType::HttpRequest->value) {
                 $executor = new RouteExecutor(
                     $this->requestScopedContainer,
                     $this->container,
@@ -87,16 +87,16 @@ final class RoutePhase
                 return $executor->execute($route, $request);
             }
 
-            throw new \RuntimeException('Unknown route type: ' . ($type ?? 'undefined'));
+            throw new RoutingException('Unknown route type: ' . $route->type);
         } catch (\Throwable $e) {
             return $this->handleRouteException($e, $route, $request);
         }
     }
 
     /**
-     * @param array{name?: string} $route
+     * @param DiscoveredRoute|null $route
      */
-    private function handleRouteException(\Throwable $e, array $route, Request $request): HttpResponse
+    private function handleRouteException(\Throwable $e, ?DiscoveredRoute $route, Request $request): HttpResponse
     {
         $logger = $this->container->has(\Semitexa\Core\Log\LoggerInterface::class)
             ? $this->container->get(\Semitexa\Core\Log\LoggerInterface::class)
@@ -107,7 +107,7 @@ final class RoutePhase
                 $logger->debug('Route not found', ['path' => $request->getPath(), 'message' => $e->getMessage()]);
             }
 
-            $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route);
+            $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route?->toArray());
             if ($response !== null) {
                 return $response;
             }
@@ -125,7 +125,7 @@ final class RoutePhase
             error_log("[Semitexa] Critical Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
         }
 
-        $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route);
+        $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route?->toArray());
         if ($response !== null) {
             return $response;
         }

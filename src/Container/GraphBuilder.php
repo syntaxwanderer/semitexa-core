@@ -6,6 +6,7 @@ namespace Semitexa\Core\Container;
 
 use Semitexa\Core\Container\Exception\ContainerBuildException;
 use Semitexa\Core\Container\Exception\InjectionException;
+use Semitexa\Core\Exception\ContainerException;
 use Semitexa\Core\Registry\RegistryContractResolverGenerator;
 use ReflectionClass;
 use ReflectionNamedType;
@@ -311,7 +312,7 @@ final class GraphBuilder
         try {
             $instance = $ref->newInstanceWithoutConstructor();
         } catch (\Throwable $e) {
-            throw new \RuntimeException("Container: cannot instantiate {$class}: " . $e->getMessage(), 0, $e);
+            throw new ContainerException("Container: cannot instantiate {$class}: " . $e->getMessage(), $e);
         }
 
         $this->injectionAnalyzer->injectConfigProperties($instance, $class, $ref);
@@ -347,7 +348,7 @@ final class GraphBuilder
                         $args[] = $param->getDefaultValue();
                         continue;
                     }
-                    throw new \RuntimeException("Container: cannot resolve constructor param \${$param->getName()} for {$class}");
+                    throw new ContainerException("Container: cannot resolve constructor param \${$param->getName()} for {$class}");
                 }
                 $name = $type->getName();
                 $mappedClass = $idToClass[$name] ?? null;
@@ -360,7 +361,7 @@ final class GraphBuilder
                         $args[] = $param->getDefaultValue();
                         continue;
                     }
-                    throw new \RuntimeException("Container: missing dependency for {$class}::__construct(\${$param->getName()}: {$name})");
+                    throw new ContainerException("Container: missing dependency for {$class}::__construct(\${$param->getName()}: {$name})");
                 }
                 $args[] = $inst;
             }

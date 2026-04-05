@@ -13,6 +13,7 @@ use Semitexa\Core\Attribute\InjectAsMutable;
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Container\Exception\InjectionException;
 use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Exception\BootstrapException;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Environment;
 use ReflectionClass;
@@ -48,7 +49,7 @@ final class InjectionAnalyzer
     public function collectExecutionScopedClasses(array $idToClass): array
     {
         if ($this->classDiscovery === null || $this->attributeDiscovery === null) {
-            throw new \LogicException('setDiscoveryInstances() must be called before collectExecutionScopedClasses()');
+            throw new BootstrapException('setDiscoveryInstances() must be called before collectExecutionScopedClasses()');
         }
 
         $executionScopedClasses = [];

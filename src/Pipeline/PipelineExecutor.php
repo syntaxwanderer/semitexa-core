@@ -7,6 +7,7 @@ namespace Semitexa\Core\Pipeline;
 use Psr\Container\ContainerInterface;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Event\EventDispatcherInterface;
+use Semitexa\Core\Exception\PipelineException;
 use Semitexa\Core\HttpResponse;
 use Semitexa\Core\Event\HandlerCompleted;
 use Semitexa\Core\Queue\HandlerExecution;
@@ -68,7 +69,7 @@ final class PipelineExecutor
     {
         if ($instance instanceof TypedHandlerInterface) {
             if ($context->resourceDto === null) {
-                throw new \LogicException(sprintf(
+                throw new PipelineException(sprintf(
                     'TypedHandlerInterface %s requires a resource DTO, but none was provided.',
                     $instance::class,
                 ));
@@ -81,7 +82,7 @@ final class PipelineExecutor
             );
 
             if ($result instanceof HttpResponse) {
-                throw new \LogicException(sprintf(
+                throw new PipelineException(sprintf(
                     'Handler %s must return a ResourceInterface, not a HttpResponse object. '
                     . 'Use domain exceptions for errors and resource DTO methods for data.',
                     $instance::class,
@@ -89,7 +90,7 @@ final class PipelineExecutor
             }
 
             if (!$result instanceof \Semitexa\Core\Contract\ResourceInterface) {
-                throw new \LogicException(sprintf(
+                throw new PipelineException(sprintf(
                     'Handler %s must return a ResourceInterface, got %s.',
                     $instance::class,
                     gettype($result) . (is_object($result) ? ' (' . $instance::class . ')' : '')
@@ -105,7 +106,7 @@ final class PipelineExecutor
 
     private function executeRouteHandlers(RequestPipelineContext $context): void
     {
-        $handlers = $context->route['handlers'] ?? [];
+        $handlers = $context->route->handlers;
         $sessionId = $this->getSessionIdForAsyncDelivery($context->request);
 
         foreach ($handlers as $handlerMeta) {
@@ -117,7 +118,7 @@ final class PipelineExecutor
             $execution = $handlerMeta['execution'] ?? HandlerExecution::Sync->value;
             if ($execution === HandlerExecution::Async->value) {
                 QueueDispatcher::enqueue(
-                    is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $context->route['class'] ?? ''],
+                    is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $context->route->requestClass],
                     $context->requestDto,
                     $context->resourceDto,
                     $sessionId
@@ -132,7 +133,7 @@ final class PipelineExecutor
             try {
                 $handler = $this->requestScopedContainer->get($handlerClass);
             } catch (\Throwable $e) {
-                throw new \RuntimeException("Failed to resolve handler {$handlerClass}: " . $e->getMessage(), 0, $e);
+                throw new PipelineException("Failed to resolve handler {$handlerClass}: " . $e->getMessage(), $e);
             }
 
             $this->invokeListener($handler, $context);

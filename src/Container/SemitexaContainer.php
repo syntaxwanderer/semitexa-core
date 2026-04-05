@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace Semitexa\Core\Container;
 
 use Semitexa\Core\Auth\AuthContextInterface;
+use Semitexa\Core\Container\BuildPhase\BuildContext;
 use Semitexa\Core\Container\Exception\ContainerSealedException;
 use Semitexa\Core\Container\Exception\InjectionException;
+use Semitexa\Core\Container\Store\InjectionMap;
+use Semitexa\Core\Container\Store\InstanceStore;
+use Semitexa\Core\Container\Store\TypeMap;
+use Semitexa\Core\Exception\ContainerException;
 use Semitexa\Core\Cookie\CookieJarInterface;
 use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Request;
@@ -28,29 +33,17 @@ use ReflectionNamedType;
  *
  * Constructors with parameters are forbidden on container-managed framework objects.
  * Container is sealed after boot — set() throws ContainerSealedException.
+ *
+ * Internal state is organized into three typed stores:
+ * - InstanceStore: readonly instances, execution-scoped prototypes, factories
+ * - TypeMap: contract bindings, registered classes, resolver mappings, scope detection
+ * - InjectionMap: per-class property injection metadata
  */
 final class SemitexaContainer implements ContainerInterface
 {
-    /** @var array<string, object> id (class/interface) => shared instance (readonly) */
-    private array $readonlyInstances = [];
-
-    /** @var array<string, object> class => prototype instance (execution-scoped) */
-    private array $executionScopedPrototypes = [];
-
-    /** @var array<string, object> factory interface => ContractFactory instance */
-    private array $factories = [];
-
-    /** @var array<string, class-string> id => concrete class (for interfaces, resolved from registry/resolver) */
-    private array $idToClass = [];
-
-    /** @var array<class-string, true> classes that are execution-scoped */
-    private array $executionScopedClasses = [];
-
-    /** @var array<class-string, class-string> interface => resolver class (when resolver exists) */
-    private array $interfaceToResolver = [];
-
-    /** @var array<class-string, array<string, array{kind: string, type: class-string}>> */
-    private array $injections = [];
+    private InstanceStore $instanceStore;
+    private TypeMap $typeMap;
+    private InjectionMap $injectionMap;
 
     /** @var array<string, object> type => execution context value (Request, Session, etc.) */
     private array $executionContextValues = [];
@@ -67,6 +60,13 @@ final class SemitexaContainer implements ContainerInterface
         AuthContextInterface::class,
         LocaleContextInterface::class,
     ];
+
+    public function __construct()
+    {
+        $this->instanceStore = new InstanceStore();
+        $this->typeMap = new TypeMap();
+        $this->injectionMap = new InjectionMap();
+    }
 
     /**
      * Set execution-scoped context values. Called once per execution before handler resolution.
@@ -107,33 +107,45 @@ final class SemitexaContainer implements ContainerInterface
                 . "Attempted to set: {$id}"
             );
         }
-        $this->readonlyInstances[$id] = $instance;
+        $this->instanceStore->readonly[$id] = $instance;
     }
 
     public function get(string $id): object
     {
-        if (isset($this->readonlyInstances[$id])) {
-            return $this->readonlyInstances[$id];
-        }
-        if (isset($this->factories[$id])) {
-            return $this->factories[$id];
+        // 1. Direct readonly instance
+        if (isset($this->instanceStore->readonly[$id])) {
+            return $this->instanceStore->readonly[$id];
         }
 
-        $class = $this->idToClass[$id] ?? null;
-        if ($class !== null && isset($this->executionScopedPrototypes[$class])) {
-            $clone = clone $this->executionScopedPrototypes[$class];
-            $this->injectMutableProperties($clone, $class);
-            return $clone;
+        // 2. Factory
+        if (isset($this->instanceStore->factories[$id])) {
+            return $this->instanceStore->factories[$id];
         }
 
-        // Interface -> resolver -> active contract
-        $resolverClass = $this->interfaceToResolver[$id] ?? null;
+        // 3. Resolve id to concrete class via TypeMap
+        $class = $this->typeMap->resolveClass($id);
+        if ($class !== null) {
+            // Check readonly by concrete class (handles interface → concrete resolution)
+            if (isset($this->instanceStore->readonly[$class])) {
+                return $this->instanceStore->readonly[$class];
+            }
+
+            // Check execution-scoped prototype
+            if (isset($this->instanceStore->prototypes[$class])) {
+                $clone = clone $this->instanceStore->prototypes[$class];
+                $this->injectMutableProperties($clone, $class);
+                return $clone;
+            }
+        }
+
+        // 4. Interface → resolver → active contract
+        $resolverClass = $this->typeMap->interfaceToResolver[$id] ?? null;
         if ($resolverClass !== null) {
-            $resolver = $this->readonlyInstances[$resolverClass] ?? null;
+            $resolver = $this->instanceStore->readonly[$resolverClass] ?? null;
             if ($resolver !== null && method_exists($resolver, 'getContract')) {
                 $active = $resolver->getContract();
                 $activeClass = $active::class;
-                if (isset($this->executionScopedPrototypes[$activeClass])) {
+                if (isset($this->instanceStore->prototypes[$activeClass])) {
                     $clone = clone $active;
                     $this->injectMutableProperties($clone, $activeClass);
                     return $clone;
@@ -147,10 +159,19 @@ final class SemitexaContainer implements ContainerInterface
 
     public function has(string $id): bool
     {
-        return isset($this->readonlyInstances[$id])
-            || isset($this->interfaceToResolver[$id])
-            || isset($this->idToClass[$id])
-            || isset($this->factories[$id]);
+        return isset($this->instanceStore->readonly[$id])
+            || $this->typeMap->isKnown($id)
+            || isset($this->instanceStore->factories[$id]);
+    }
+
+    /**
+     * Check whether a service ID resolves to an execution-scoped prototype.
+     */
+    public function isExecutionScoped(string $id): bool
+    {
+        $class = $this->typeMap->resolveClass($id) ?? $id;
+
+        return isset($this->instanceStore->prototypes[$class]);
     }
 
     /**
@@ -191,7 +212,7 @@ final class SemitexaContainer implements ContainerInterface
                     $args[] = $param->getDefaultValue();
                     continue;
                 }
-                throw new \RuntimeException("Container: cannot resolve constructor param \${$param->getName()} for {$class}");
+                throw new ContainerException("Container: cannot resolve constructor param \${$param->getName()} for {$class}");
             }
         }
         return $args !== [] ? $ref->newInstanceArgs($args) : $ref->newInstance();
@@ -202,20 +223,9 @@ final class SemitexaContainer implements ContainerInterface
      */
     public function build(): void
     {
-        $injectionAnalyzer = new InjectionAnalyzer();
-        $graphBuilder = new GraphBuilder($injectionAnalyzer);
-        $cycleDetector = new CycleDetector();
-        $bootstrapper = new ContainerBootstrapper($injectionAnalyzer, $graphBuilder, $cycleDetector);
-
-        $bootstrapper->build(
-            readonlyInstances: $this->readonlyInstances,
-            executionScopedPrototypes: $this->executionScopedPrototypes,
-            factories: $this->factories,
-            idToClass: $this->idToClass,
-            executionScopedClasses: $this->executionScopedClasses,
-            interfaceToResolver: $this->interfaceToResolver,
-            injections: $this->injections,
-        );
+        $context = new BuildContext($this->instanceStore, $this->typeMap, $this->injectionMap);
+        $bootstrapper = new ContainerBootstrapper();
+        $bootstrapper->build($context);
 
         // === BootPhase::Ready ===
         $this->sealed = true;
@@ -227,7 +237,7 @@ final class SemitexaContainer implements ContainerInterface
      */
     private function injectMutableProperties(object $instance, string $class): void
     {
-        $injections = $this->injections[$class] ?? [];
+        $injections = $this->injectionMap->injections[$class] ?? [];
         $ref = new ReflectionClass($instance);
 
         foreach ($injections as $propName => $info) {
@@ -246,9 +256,9 @@ final class SemitexaContainer implements ContainerInterface
             }
 
             // Try execution-scoped prototypes (clone them)
-            $protoClass = $this->idToClass[$typeName] ?? $typeName;
-            $proto = $this->executionScopedPrototypes[$protoClass]
-                ?? $this->executionScopedPrototypes[$typeName]
+            $protoClass = $this->typeMap->resolveClass($typeName) ?? $typeName;
+            $proto = $this->instanceStore->prototypes[$protoClass]
+                ?? $this->instanceStore->prototypes[$typeName]
                 ?? null;
             if ($proto !== null) {
                 $prop = $ref->getProperty($propName);
@@ -272,7 +282,7 @@ final class SemitexaContainer implements ContainerInterface
             if ($info['kind'] !== 'factory') {
                 continue;
             }
-            $factory = $this->factories[$info['type']] ?? null;
+            $factory = $this->instanceStore->factories[$info['type']] ?? null;
             if ($factory !== null) {
                 $prop = $ref->getProperty($propName);
                 $prop->setAccessible(true);

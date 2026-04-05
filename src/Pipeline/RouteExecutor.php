@@ -10,7 +10,9 @@ use Semitexa\Core\Http\PayloadHydrator;
 use Semitexa\Core\Http\PayloadValidator;
 use Semitexa\Core\Http\Response\ResourceResponse;
 use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Discovery\DiscoveredRoute;
 use Semitexa\Core\Discovery\DefaultRouteMetadataResolver;
+use Semitexa\Core\Discovery\PayloadPartRegistry;
 use Semitexa\Core\Discovery\ResolvedRouteMetadata;
 use Semitexa\Core\Environment;
 use Semitexa\Core\Error\ErrorRouteDispatcher;
@@ -18,6 +20,7 @@ use Semitexa\Core\Http\PayloadFactory;
 use Semitexa\Core\Http\ContentNegotiator;
 use Semitexa\Core\Http\HttpStatus;
 use Semitexa\Core\Exception\DomainException;
+use Semitexa\Core\Exception\PipelineException;
 use Semitexa\Core\Contract\ExceptionResponseMapperInterface;
 use Semitexa\Core\Contract\RouteResponseDecoratorInterface;
 use Semitexa\Core\Contract\RouteMetadataResolverInterface;
@@ -44,10 +47,19 @@ class RouteExecutor
         return $attributeDiscovery;
     }
 
-    /**
-     * @param array{type?: string, class?: string, handlers?: list<array{class?: string, execution?: string}>, responseClass?: string, method?: string, name?: string, consumes?: list<string>|null, produces?: list<string>|null} $route
-     */
-    public function execute(array $route, Request $request): HttpResponse
+    private function getPayloadPartRegistry(): PayloadPartRegistry
+    {
+        if ($this->container->has(PayloadPartRegistry::class)) {
+            /** @var PayloadPartRegistry $registry */
+            $registry = $this->container->get(PayloadPartRegistry::class);
+            return $registry;
+        }
+
+        // Fallback: extract from AttributeDiscovery (backwards compat)
+        return $this->getAttributeDiscovery()->getPayloadPartRegistry();
+    }
+
+    public function execute(DiscoveredRoute $route, Request $request): HttpResponse
     {
         $metadata = null;
         $exceptionMapper = null;
@@ -93,7 +105,7 @@ class RouteExecutor
             $pipelineExecutor->execute($context);
             $resDto = $context->resourceDto;
             if (!is_object($resDto)) {
-                throw new \RuntimeException('Pipeline did not produce a response DTO.');
+                throw new PipelineException('Pipeline did not produce a response DTO.');
             }
 
             // 5. Render Response
@@ -119,7 +131,7 @@ class RouteExecutor
      * Resolve route metadata through the registered RouteMetadataResolverInterface.
      * Falls back to the DefaultRouteMetadataResolver when the container has no binding.
      */
-    private function resolveRouteMetadata(array $route): ResolvedRouteMetadata
+    private function resolveRouteMetadata(DiscoveredRoute $route): ResolvedRouteMetadata
     {
         if ($this->container->has(RouteMetadataResolverInterface::class)) {
             /** @var RouteMetadataResolverInterface $resolver */
@@ -166,7 +178,7 @@ class RouteExecutor
             : Environment::create();
 
         $this->errorRouteDispatcher = new ErrorRouteDispatcher(
-            $this->getAttributeDiscovery(),
+            $this->container->get(\Semitexa\Core\Discovery\RouteRegistry::class),
             $this->requestScopedContainer,
             $this->container,
             $this->authBootstrapper instanceof \Semitexa\Auth\AuthBootstrapper ? $this->authBootstrapper : null,
@@ -190,17 +202,17 @@ class RouteExecutor
     /**
      * @return array{0: object, 1: ?HttpResponse}
      */
-    private function hydrateRequest(array $route, Request $request): array
+    private function hydrateRequest(DiscoveredRoute $route, Request $request): array
     {
-        $requestClass = $route['class'] ?? null;
-        if (!is_string($requestClass) || $requestClass === '') {
-            throw new \RuntimeException('Route has no class defined');
+        $requestClass = $route->requestClass;
+        if ($requestClass === '') {
+            throw new PipelineException('Route has no class defined');
         }
 
-        $traits = $this->getAttributeDiscovery()->getPayloadPartsForClass($requestClass);
+        $traits = $this->getPayloadPartRegistry()->getPayloadPartsForClass($requestClass);
         $reqDto = class_exists($requestClass) ? PayloadFactory::createInstance($requestClass, $traits) : null;
         if (!$reqDto) {
-            throw new \RuntimeException("Cannot instantiate request class: {$requestClass}");
+            throw new PipelineException("Cannot instantiate request class: {$requestClass}");
         }
 
         try {
@@ -222,14 +234,14 @@ class RouteExecutor
         return [$reqDto, null];
     }
 
-    private function resolveResponseDto(array $route): object
+    private function resolveResponseDto(DiscoveredRoute $route): object
     {
-        $responseClass = $route['responseClass'] ?? null;
+        $responseClass = $route->responseClass;
         if ($responseClass !== null && !class_exists($responseClass)) {
-            throw new \RuntimeException("Cannot instantiate response class: {$responseClass}");
+            throw new PipelineException("Cannot instantiate response class: {$responseClass}");
         }
         if ($responseClass !== null) {
-            $traits = $this->getAttributeDiscovery()->getResourcePartsForClass($responseClass);
+            $traits = $this->getPayloadPartRegistry()->getResourcePartsForClass($responseClass);
             $resDto = PayloadFactory::createInstance($responseClass, $traits);
         } else {
             $resDto = null;
@@ -273,7 +285,7 @@ class RouteExecutor
                 return $response;
             }
 
-            throw new \RuntimeException('toCoreResponse() must return an instance of HttpResponse.');
+            throw new PipelineException('toCoreResponse() must return an instance of HttpResponse.');
         }
         return HttpResponse::json(['ok' => true]);
     }
