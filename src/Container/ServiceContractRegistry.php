@@ -24,9 +24,11 @@ final class ServiceContractRegistry
     private array $contractDetails = [];
 
     public function __construct(
-        private readonly ClassDiscovery $classDiscovery,
-        private readonly ModuleRegistry $moduleRegistry,
+        private readonly ?ClassDiscovery $classDiscovery = null,
+        private readonly ?ModuleRegistry $moduleRegistry = null,
     ) {
+        $this->classDiscovery ??= new ClassDiscovery();
+        $this->moduleRegistry ??= new ModuleRegistry();
         $this->build();
     }
 
