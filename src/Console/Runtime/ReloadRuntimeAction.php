@@ -32,6 +32,11 @@ final class ReloadRuntimeAction
             return false;
         }
 
+        if (!defined('SIGUSR1')) {
+            $this->io->error('SIGUSR1 signal is unavailable; server reload requires the PCNTL extension.');
+            return false;
+        }
+
         $this->io->text("<info>[reload]</info> Sending SIGUSR1 to Swoole master (PID {$pid})...");
 
         if (!posix_kill($pid, SIGUSR1)) {
@@ -110,24 +115,6 @@ final class ReloadRuntimeAction
             }
         }
 
-        // Fallback: scan /proc for server.php processes
-        if (is_dir('/proc')) {
-            $matchedPids = [];
-            foreach (glob('/proc/[0-9]*/cmdline') ?: [] as $cmdlineFile) {
-                $cmdline = @file_get_contents($cmdlineFile);
-                if ($cmdline !== false && str_contains($cmdline, 'server.php')) {
-                    $pid = (int) basename(dirname($cmdlineFile));
-                    if ($pid > 0 && function_exists('posix_kill') && posix_kill($pid, 0)) {
-                        $matchedPids[] = $pid;
-                    }
-                }
-            }
-            if ($matchedPids !== []) {
-                sort($matchedPids);
-                return $matchedPids[0];
-            }
-        }
-
         return null;
     }
 
@@ -135,7 +122,7 @@ final class ReloadRuntimeAction
     {
         $cmdlineFile = "/proc/{$pid}/cmdline";
         if (!is_readable($cmdlineFile)) {
-            return true;
+            return false;
         }
         $cmdline = @file_get_contents($cmdlineFile);
         return $cmdline !== false && str_contains($cmdline, 'server.php');

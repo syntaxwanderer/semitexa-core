@@ -8,6 +8,8 @@ Another module can target a base `#[AsPayload(...)]` class and contribute extra 
 
 That includes validation ownership. If the trait adds a field, the trait should also own the setter-level guard for that field instead of pushing the rule back into a base-class `validate()` method.
 
+If a setter throws `Semitexa\Core\Exception\ValidationException`, the Core request pipeline surfaces that as a 422 response with field-level errors.
+
 At runtime, Semitexa discovers all matching payload-part traits and composes a wrapper class that:
 
 - extends the base payload
@@ -64,7 +66,7 @@ trait SearchTrackingPart
     public function setCampaign(?string $campaign): void
     {
         $campaign = $campaign !== null ? trim($campaign) : null;
-        if ($campaign !== null && strlen($campaign) > 64) {
+        if ($campaign !== null && mb_strlen($campaign) > 64) {
             throw new \Semitexa\Core\Exception\ValidationException([
                 'campaign' => ['Campaign code must stay below 64 characters.'],
             ]);

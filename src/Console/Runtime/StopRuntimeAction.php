@@ -19,38 +19,29 @@ final class StopRuntimeAction
 
         $this->io->text('<info>[stop]</info> Stopping runtime...');
 
-        // 1. Docker Compose down
+        // 1. Docker Compose down/stop
         if (file_exists($projectRoot . '/docker-compose.yml')) {
-            $composeArgs = ['docker', 'compose'];
-            $overlays = [
-                'docker-compose.rabbitmq.yml',
-                'docker-compose.mysql.yml',
-                'docker-compose.redis.yml',
-                'docker-compose.ollama.yml',
-            ];
-            $activeOverlays = array_filter($overlays, fn(string $f) => file_exists($projectRoot . '/' . $f));
-            if ($activeOverlays !== []) {
-                $composeArgs[] = '-f';
-                $composeArgs[] = 'docker-compose.yml';
-                foreach ($activeOverlays as $overlay) {
-                    $composeArgs[] = '-f';
-                    $composeArgs[] = $overlay;
-                }
-            }
-
-            $cmd = array_merge($composeArgs, ['down']);
-            if ($service !== null) {
-                // For service-specific stop, use 'stop' instead of 'down'
-                $cmd = array_merge($composeArgs, ['stop', $service]);
-            }
+            $composeArgs = array_merge(['docker', 'compose'], (new StartRuntimeAction($this->io))->getComposeArgs());
+            $cmd = $service !== null
+                ? array_merge($composeArgs, ['stop', $service])
+                : array_merge($composeArgs, ['down']);
 
             $process = new Process($cmd, $projectRoot);
             $process->setTimeout(30);
             $process->run(fn(string $type, string $buffer) => $this->io->write($buffer));
 
             if (!$process->isSuccessful()) {
-                $this->io->warning('Docker Compose stop failed. Trying PID/port cleanup...');
+                $this->io->warning('Docker Compose stop failed.');
+                if ($service !== null) {
+                    return false;
+                }
+                $this->io->warning('Trying PID/port cleanup...');
             }
+        }
+
+        if ($service !== null) {
+            $this->io->text('<info>[stop]</info> Service stopped.');
+            return true;
         }
 
         // 2. PID file cleanup
@@ -70,7 +61,7 @@ final class StopRuntimeAction
         }
 
         // 3. Port-based cleanup
-        $port = (string) Environment::getEnvValue('SWOOLE_PORT', '9502');
+        $port = $this->resolveSwoolePort();
         $attempts = 0;
         while ($attempts < 5) {
             $pids = $this->getPidsOnPort($port);
@@ -117,7 +108,7 @@ final class StopRuntimeAction
     /**
      * @return list<int>
      */
-    private function getPidsOnPort(string $port): array
+    private function getPidsOnPort(int $port): array
     {
         $pids = [];
         $output = shell_exec("ss -ltnp 2>/dev/null | awk -v port=\":{$port}\" '\$4 ~ port {print \$6}' | sed -n 's/.*pid=\\([0-9]*\\).*/\\1/p' | sort -u");
@@ -129,5 +120,18 @@ final class StopRuntimeAction
             }
         }
         return $pids;
+    }
+
+    private function resolveSwoolePort(): int
+    {
+        $raw = Environment::getEnvValue('SWOOLE_PORT', '9502');
+        $port = filter_var($raw, FILTER_VALIDATE_INT, [
+            'options' => [
+                'min_range' => 1,
+                'max_range' => 65535,
+            ],
+        ]);
+
+        return $port !== false ? $port : 9502;
     }
 }

@@ -31,7 +31,7 @@ final class StartRuntimeAction
         }
 
         $useRabbitMq = $this->shouldUseOverlay($projectRoot, 'docker-compose.rabbitmq.yml', 'EVENTS_ASYNC', ['1', 'true', 'yes']);
-        $useMysql = $this->shouldUseOverlay($projectRoot, 'docker-compose.mysql.yml', 'DB_DRIVER');
+        $useMysql = $this->shouldUseOverlay($projectRoot, 'docker-compose.mysql.yml', 'DB_DRIVER', ['mysql', 'mysqli', 'mariadb']);
         $useRedis = $this->shouldUseOverlay($projectRoot, 'docker-compose.redis.yml', 'REDIS_HOST');
         $useOllama = $this->shouldUseOverlayExact($projectRoot, 'docker-compose.ollama.yml', 'LLM_PROVIDER', 'ollama');
 
@@ -76,7 +76,7 @@ final class StartRuntimeAction
     {
         $projectRoot = ProjectRoot::get();
         $useRabbitMq = $this->shouldUseOverlay($projectRoot, 'docker-compose.rabbitmq.yml', 'EVENTS_ASYNC', ['1', 'true', 'yes']);
-        $useMysql = $this->shouldUseOverlay($projectRoot, 'docker-compose.mysql.yml', 'DB_DRIVER');
+        $useMysql = $this->shouldUseOverlay($projectRoot, 'docker-compose.mysql.yml', 'DB_DRIVER', ['mysql', 'mysqli', 'mariadb']);
         $useRedis = $this->shouldUseOverlay($projectRoot, 'docker-compose.redis.yml', 'REDIS_HOST');
         $useOllama = $this->shouldUseOverlayExact($projectRoot, 'docker-compose.ollama.yml', 'LLM_PROVIDER', 'ollama');
 

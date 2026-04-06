@@ -80,11 +80,15 @@ final class ClearCacheAction
                 continue;
             }
             $full = $path . '/' . $item;
+            if (is_link($full) || is_file($full)) {
+                $ok = @unlink($full) && $ok;
+                continue;
+            }
             if (is_dir($full)) {
                 $ok = $this->removeDirectoryRecursive($full) && $ok;
-            } else {
-                $ok = @unlink($full) && $ok;
+                continue;
             }
+            $ok = @unlink($full) && $ok;
         }
         return $ok;
     }
@@ -103,8 +107,13 @@ final class ClearCacheAction
                 continue;
             }
             $full = $path . '/' . $item;
+            if (is_link($full) || is_file($full)) {
+                @unlink($full);
+                continue;
+            }
             if (is_dir($full)) {
                 $this->removeDirectoryRecursive($full);
+                continue;
             }
             @unlink($full);
         }

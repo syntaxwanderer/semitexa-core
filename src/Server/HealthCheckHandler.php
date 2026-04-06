@@ -17,7 +17,13 @@ class HealthCheckHandler
     {
         if (!$this->buildHashLoaded) {
             $markerFile = \Semitexa\Core\Support\ProjectRoot::get() . '/var/runtime/build.hash';
-            $this->buildHash = is_file($markerFile) ? trim((string) file_get_contents($markerFile)) : null;
+            if (!is_file($markerFile)) {
+                $this->buildHash = null;
+            } else {
+                $contents = file_get_contents($markerFile);
+                $trimmed = $contents === false ? '' : trim($contents);
+                $this->buildHash = $trimmed !== '' ? $trimmed : null;
+            }
             $this->buildHashLoaded = true;
         }
         return $this->buildHash;

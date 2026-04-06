@@ -54,7 +54,7 @@ readonly class Environment
             appName: $get('APP_NAME', 'Semitexa Framework'),
             appHost: $get('APP_HOST', 'localhost'),
             appPort: (int) $get('APP_PORT', '8000'),
-            swoolePort: (int) $get('SWOOLE_PORT', '9501'),
+            swoolePort: (int) $get('SWOOLE_PORT', '9502'),
             swooleSsePort: (int) $get('SWOOLE_SSE_PORT', '9503'),
             swooleHost: $get('SWOOLE_HOST', '0.0.0.0'),
             swooleWorkerNum: (int) $get('SWOOLE_WORKER_NUM', '4'),

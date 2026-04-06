@@ -27,17 +27,14 @@ final class PrepareRuntimeAction
         $cacheAction = new ClearCacheAction($this->io);
         $cacheAction->execute();
 
-        $this->writeBuildMarker();
-
-        return true;
+        return $this->writeBuildMarker();
     }
 
     private function rebuildAutoload(): bool
     {
         if (getenv('SEMITEXA_AUTOLOAD_REBUILT') === '1') {
             $this->io->text('Autoload classmap already rebuilt during CLI bootstrap.');
-            $this->writeBuildMarker();
-            return true;
+            return $this->writeBuildMarker();
         }
 
         $root = ProjectRoot::get();
@@ -59,10 +56,10 @@ final class PrepareRuntimeAction
 
         putenv('SEMITEXA_AUTOLOAD_REBUILT=1');
         $this->io->text('Autoload classmap rebuilt.');
-        return true;
+        return $this->writeBuildMarker();
     }
 
-    private function writeBuildMarker(): void
+    private function writeBuildMarker(): bool
     {
         $root = ProjectRoot::get();
         $classMapFile = $root . '/vendor/composer/autoload_classmap.php';
@@ -74,11 +71,18 @@ final class PrepareRuntimeAction
 
         $markerDir = $root . '/var/runtime';
         if (!is_dir($markerDir)) {
-            @mkdir($markerDir, 0755, true);
+            if (!@mkdir($markerDir, 0755, true) && !is_dir($markerDir)) {
+                $this->io->error("Failed to create runtime marker directory: {$markerDir}");
+                return false;
+            }
         }
 
-        file_put_contents($markerDir . '/build.hash', $hash);
+        if (file_put_contents($markerDir . '/build.hash', $hash) === false) {
+            $this->io->error("Failed to write build marker: {$markerDir}/build.hash ({$hash})");
+            return false;
+        }
         $this->io->text("<info>[prepare]</info> Build marker written: {$hash}");
+        return true;
     }
 
     private function resolveComposer(string $projectRoot): ?string

@@ -27,7 +27,7 @@ class ServerRestartCommand extends Command
     {
         $this->setName('server:restart')
             ->setDescription('Restart Semitexa Environment (full restart with autoload rebuild and env refresh)')
-            ->addOption('service', 's', InputOption::VALUE_OPTIONAL, 'Specific service to restart');
+            ->addOption('service', 's', InputOption::VALUE_REQUIRED, 'Specific service to restart');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -35,6 +35,10 @@ class ServerRestartCommand extends Command
         $io = new SymfonyStyle($input, $output);
         /** @var string|null $service */
         $service = $input->getOption('service');
+        if ($service !== null && trim($service) === '') {
+            $io->error('The --service option requires a non-empty service name.');
+            return Command::FAILURE;
+        }
 
         $io->title('Restarting Semitexa Environment');
 
@@ -47,7 +51,8 @@ class ServerRestartCommand extends Command
         // 2. Stop
         $stop = new StopRuntimeAction($io);
         if (!$stop->execute($service)) {
-            $io->warning('Stop phase had issues, continuing with start...');
+            $io->error('Stop phase failed; aborting restart to avoid starting into a dirty runtime.');
+            return Command::FAILURE;
         }
 
         // 3. Start

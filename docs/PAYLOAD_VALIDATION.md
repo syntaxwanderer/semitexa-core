@@ -94,6 +94,8 @@ class ContactFormPayload
 - **Status:** 422 Unprocessable Entity.
 - **Default Core body example:** `{ "error": "validation_exception", "message": "The given data was invalid.", "context": { "errors": { "fieldName": ["message1", "message2"], ... } } }`.
 
+Setter-thrown `ValidationException` is the field-level signal used by this model, and the Core route pipeline maps it to the 422 envelope above.
+
 ## Session / Cookie payloads
 
 The same rules apply: protected fields, getters/setters, and explicit field guards. Session and queue payloads are serialized with `PayloadSerializer`, which uses getters for `toArray()` and setters for `hydrate()`.
