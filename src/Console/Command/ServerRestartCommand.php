@@ -50,7 +50,7 @@ class ServerRestartCommand extends Command
 
         // 3. Start
         $start = new StartRuntimeAction($io);
-        if (!$start->execute()) {
+        if (!$start->execute($service)) {
             return Command::FAILURE;
         }
 

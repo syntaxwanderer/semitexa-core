@@ -92,7 +92,7 @@ class ContactFormPayload
 ## Response on validation failure
 
 - **Status:** 422 Unprocessable Entity.
-- **Body example:** `{ "errors": { "fieldName": ["message1", "message2"], ... } }`.
+- **Default Core body example:** `{ "error": "validation_exception", "message": "The given data was invalid.", "context": { "errors": { "fieldName": ["message1", "message2"], ... } } }`.
 
 ## Session / Cookie payloads
 

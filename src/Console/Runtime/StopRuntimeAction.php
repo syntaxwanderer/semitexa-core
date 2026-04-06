@@ -70,7 +70,7 @@ final class StopRuntimeAction
         }
 
         // 3. Port-based cleanup
-        $port = (string) Environment::getEnvValue('SWOOLE_PORT', '9501');
+        $port = (string) Environment::getEnvValue('SWOOLE_PORT', '9502');
         $attempts = 0;
         while ($attempts < 5) {
             $pids = $this->getPidsOnPort($port);
@@ -105,7 +105,7 @@ final class StopRuntimeAction
 
     private function killPid(int $pid, bool $force = false): void
     {
-        $sig = $force ? SIGKILL : SIGTERM;
+        $sig = $force ? (defined('SIGKILL') ? SIGKILL : 9) : (defined('SIGTERM') ? SIGTERM : 15);
         if (function_exists('posix_kill')) {
             @posix_kill($pid, $sig);
         } else {

@@ -17,7 +17,7 @@ final class StartRuntimeAction
      * Start Docker Compose containers.
      * Returns false on failure.
      */
-    public function execute(): bool
+    public function execute(?string $service = null): bool
     {
         $projectRoot = ProjectRoot::get();
 
@@ -49,7 +49,12 @@ final class StartRuntimeAction
 
         $this->io->text('<info>[start]</info> Starting containers...');
 
-        $process = new Process(array_merge(['docker', 'compose'], $composeArgs, ['up', '-d']), $projectRoot);
+        $upArgs = ['up', '-d'];
+        if ($service !== null && $service !== '') {
+            $upArgs[] = $service;
+        }
+
+        $process = new Process(array_merge(['docker', 'compose'], $composeArgs, $upArgs), $projectRoot);
         $process->setTimeout(null);
         $process->run(fn(string $type, string $buffer) => $this->io->write($buffer));
 
