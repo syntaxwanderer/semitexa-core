@@ -177,8 +177,10 @@ class RouteExecutor
             ? $this->container->get(Environment::class)
             : Environment::create();
 
+        /** @var \Semitexa\Core\Discovery\RouteRegistry $routeRegistry */
+        $routeRegistry = $this->container->get(\Semitexa\Core\Discovery\RouteRegistry::class);
         $this->errorRouteDispatcher = new ErrorRouteDispatcher(
-            $this->container->get(\Semitexa\Core\Discovery\RouteRegistry::class),
+            $routeRegistry,
             $this->requestScopedContainer,
             $this->container,
             $this->authBootstrapper instanceof \Semitexa\Auth\AuthBootstrapper ? $this->authBootstrapper : null,

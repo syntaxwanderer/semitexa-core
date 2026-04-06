@@ -40,7 +40,7 @@ final class RoutePhase
         $routeRegistry = $this->container->get(RouteRegistry::class);
         $this->routeRegistry = $routeRegistry;
         $this->errorRouteDispatcher = new ErrorRouteDispatcher(
-            $this->routeRegistry,
+            $routeRegistry,
             $this->requestScopedContainer,
             $this->container,
             $this->authBootstrapper,
@@ -53,6 +53,7 @@ final class RoutePhase
         $request = $context->request;
         $routingPath = $context->getRoutingPath();
 
+        /** @var HandlerRegistry|null $handlerRegistry */
         $handlerRegistry = $this->container->has(HandlerRegistry::class)
             ? $this->container->get(HandlerRegistry::class)
             : null;
@@ -143,7 +144,7 @@ final class RoutePhase
     }
 
     /**
-     * @param array{name?: string}|null $currentRoute
+     * @param array<string, mixed>|null $currentRoute
      */
     public function renderErrorThrowable(\Throwable $throwable, Request $request, ?array $currentRoute = null): ?HttpResponse
     {
@@ -151,7 +152,7 @@ final class RoutePhase
     }
 
     /**
-     * @param array{name?: string}|null $currentRoute
+     * @param array<string, mixed>|null $currentRoute
      */
     public function renderErrorStatus(int $statusCode, Request $request, ?array $currentRoute = null): ?HttpResponse
     {

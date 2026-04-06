@@ -110,7 +110,7 @@ final class PipelineExecutor
         $sessionId = $this->getSessionIdForAsyncDelivery($context->request);
 
         foreach ($handlers as $handlerMeta) {
-            $handlerClass = is_array($handlerMeta) ? ($handlerMeta['class'] ?? null) : $handlerMeta;
+            $handlerClass = $handlerMeta['class'] ?? null;
             if (!$handlerClass) {
                 continue;
             }
@@ -118,7 +118,7 @@ final class PipelineExecutor
             $execution = $handlerMeta['execution'] ?? HandlerExecution::Sync->value;
             if ($execution === HandlerExecution::Async->value) {
                 QueueDispatcher::enqueue(
-                    is_array($handlerMeta) ? $handlerMeta : ['class' => $handlerClass, 'payload' => $context->route->requestClass],
+                    $handlerMeta,
                     $context->requestDto,
                     $context->resourceDto,
                     $sessionId

@@ -37,9 +37,13 @@ final class DefaultRouteInspectionRegistry implements RouteInspectionRegistryInt
             return $this->cache;
         }
 
+        /** @var list<array<string, mixed>> $routes */
+        $routes = $this->attributeDiscovery->getEnrichedRoutes();
+
         $resolved = [];
-        foreach ($this->attributeDiscovery->getEnrichedRoutes() as $route) {
-            $resolved[] = $this->metadataResolver->resolve($route);
+        foreach ($routes as $route) {
+            /** @var array<string, mixed> $route */
+            $resolved[] = $this->metadataResolver->resolve(DiscoveredRoute::fromArray($route));
         }
 
         $this->cache = $resolved;

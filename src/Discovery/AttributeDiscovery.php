@@ -484,7 +484,6 @@ class AttributeDiscovery
                         } catch (\LogicException $e) {
                             throw new ConfigurationException(
                                 "Failed to warm reflection cache for TypedHandlerInterface handler {$class->getName()}: " . $e->getMessage(),
-                                0,
                                 $e
                             );
                         }
@@ -508,10 +507,10 @@ class AttributeDiscovery
     {
         // Discover layout slot contributions (optional)
         if (
-            class_exists('Semitexa\\Ssr\\Attributes\\AsLayoutSlot')
+            class_exists('Semitexa\\Ssr\\Attribute\\AsLayoutSlot')
             && class_exists('Semitexa\\Ssr\\Layout\\LayoutSlotRegistry')
         ) {
-            $slotAttribute = 'Semitexa\\Ssr\\Attributes\\AsLayoutSlot';
+            $slotAttribute = 'Semitexa\\Ssr\\Attribute\\AsLayoutSlot';
             $slotClasses = $this->classDiscovery->findClassesWithAttribute($slotAttribute);
             foreach ($slotClasses as $className) {
                 try {
@@ -524,19 +523,18 @@ class AttributeDiscovery
                         $slot = $meta->slot;
                         $template = EnvValueResolver::resolve($meta->template);
                         $context = EnvValueResolver::resolve($meta->context);
-                        $priority = $meta->priority;
                         \Semitexa\Ssr\Layout\LayoutSlotRegistry::register(
                             $handle,
                             $slot,
                             $template,
                             is_array($context) ? $context : [],
-                            $priority,
-                            $meta->deferred ?? false,
-                            $meta->cacheTtl ?? 0,
-                            $meta->dataProvider ?? null,
-                            $meta->skeletonTemplate ?? null,
-                            $meta->mode ?? 'html',
-                            $meta->refreshInterval ?? 0,
+                            $meta->priority,
+                            $meta->deferred,
+                            $meta->cacheTtl,
+                            $meta->dataProvider,
+                            $meta->skeletonTemplate,
+                            $meta->mode,
+                            $meta->refreshInterval,
                         );
                     }
                 } catch (\Throwable $e) {
@@ -564,9 +562,13 @@ class AttributeDiscovery
                         if (!property_exists($meta, 'slot') || $meta->slot === null || $meta->slot === '') {
                             throw new ConfigurationException("AsDataProvider on {$className} is missing slot.");
                         }
-                        $handles = property_exists($meta, 'handles') && is_array($meta->handles) ? $meta->handles : [];
+                        /** @var string $slotId */
+                        $slotId = $meta->slot;
+                        $handles = property_exists($meta, 'handles') && is_array($meta->handles)
+                            ? array_values(array_filter($meta->handles, static fn (mixed $handle): bool => is_string($handle) && $handle !== ''))
+                            : [];
                         \Semitexa\Ssr\Application\Service\DataProviderRegistry::register(
-                            $meta->slot,
+                            $slotId,
                             $className,
                             $handles,
                         );
@@ -592,14 +594,19 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotResourceAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attribute\AsSlotResource $meta */
+                        /** @var \Semitexa\Ssr\Attributes\AsSlotResource $meta */
                         $meta = $attr->newInstance();
+                        /** @var string $template */
                         $template = EnvValueResolver::resolve($meta->template);
                         $context = EnvValueResolver::resolve($meta->context);
+                        $clientModules = array_values(array_filter(
+                            $meta->clientModules,
+                            static fn (string $module): bool => $module !== ''
+                        ));
                         \Semitexa\Ssr\Layout\LayoutSlotRegistry::register(
                             handle: $meta->handle,
                             slot: $meta->slot,
-                            template: is_string($template) ? $template : $meta->template,
+                            template: $template,
                             context: is_array($context) ? $context : [],
                             priority: $meta->priority,
                             deferred: $meta->deferred,
@@ -609,7 +616,7 @@ class AttributeDiscovery
                             mode: $meta->mode,
                             refreshInterval: $meta->refreshInterval,
                             resourceClass: $className,
-                            clientModules: $meta->clientModules,
+                            clientModules: $clientModules,
                         );
                     }
                 } catch (\Throwable $e) {
@@ -633,7 +640,7 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotHandlerAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attribute\AsSlotHandler $meta */
+                        /** @var \Semitexa\Ssr\Attributes\AsSlotHandler $meta */
                         $meta = $attr->newInstance();
                         \Semitexa\Ssr\Layout\SlotHandlerRegistry::register(
                             slotClass: $meta->slot,
