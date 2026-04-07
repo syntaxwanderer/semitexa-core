@@ -163,6 +163,8 @@ class ClassDiscovery
                         $dir,
                         \FilesystemIterator::SKIP_DOTS,
                     ),
+                    \RecursiveIteratorIterator::SELF_FIRST,
+                    \RecursiveIteratorIterator::CATCH_GET_CHILD,
                 );
 
                 foreach ($iterator as $fileInfo) {
