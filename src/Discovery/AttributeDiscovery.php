@@ -545,10 +545,10 @@ class AttributeDiscovery
 
         // Discover DataProvider registrations (optional)
         if (
-            class_exists('Semitexa\\Ssr\\Attributes\\AsDataProvider')
+            class_exists('Semitexa\\Ssr\\Attribute\\AsDataProvider')
             && class_exists('Semitexa\\Ssr\\Application\\Service\\DataProviderRegistry')
         ) {
-            $dpAttribute = 'Semitexa\\Ssr\\Attributes\\AsDataProvider';
+            $dpAttribute = 'Semitexa\\Ssr\\Attribute\\AsDataProvider';
             $dpClasses = array_values(array_filter(
                 $this->classDiscovery->findClassesWithAttribute($dpAttribute),
                 fn (string $class) => $this->moduleRegistry->isClassActive($class) || self::isProjectResource($class)
@@ -581,10 +581,10 @@ class AttributeDiscovery
 
         // Discover AsSlotResource contributions (optional)
         if (
-            class_exists('Semitexa\\Ssr\\Attributes\\AsSlotResource')
+            class_exists('Semitexa\\Ssr\\Attribute\\AsSlotResource')
             && class_exists('Semitexa\\Ssr\\Layout\\LayoutSlotRegistry')
         ) {
-            $slotResourceAttribute = 'Semitexa\\Ssr\\Attributes\\AsSlotResource';
+            $slotResourceAttribute = 'Semitexa\\Ssr\\Attribute\\AsSlotResource';
             $slotResourceClasses = array_values(array_filter(
                 $this->classDiscovery->findClassesWithAttribute($slotResourceAttribute),
                 fn (string $class) => $this->moduleRegistry->isClassActive($class) || self::isProjectResource($class)
@@ -594,7 +594,7 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotResourceAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attributes\AsSlotResource $meta */
+                        /** @var \Semitexa\Ssr\Attribute\AsSlotResource $meta */
                         $meta = $attr->newInstance();
                         /** @var string $template */
                         $template = EnvValueResolver::resolve($meta->template);
@@ -627,10 +627,10 @@ class AttributeDiscovery
 
         // Discover AsSlotHandler contributions (optional)
         if (
-            class_exists('Semitexa\\Ssr\\Attributes\\AsSlotHandler')
+            class_exists('Semitexa\\Ssr\\Attribute\\AsSlotHandler')
             && class_exists('Semitexa\\Ssr\\Layout\\SlotHandlerRegistry')
         ) {
-            $slotHandlerAttribute = 'Semitexa\\Ssr\\Attributes\\AsSlotHandler';
+            $slotHandlerAttribute = 'Semitexa\\Ssr\\Attribute\\AsSlotHandler';
             $slotHandlerClasses = array_values(array_filter(
                 $this->classDiscovery->findClassesWithAttribute($slotHandlerAttribute),
                 fn (string $class) => $this->moduleRegistry->isClassActive($class) || self::isProjectResource($class)
@@ -640,7 +640,7 @@ class AttributeDiscovery
                     $class = new \ReflectionClass($className);
                     $attrs = $class->getAttributes($slotHandlerAttribute);
                     foreach ($attrs as $attr) {
-                        /** @var \Semitexa\Ssr\Attributes\AsSlotHandler $meta */
+                        /** @var \Semitexa\Ssr\Attribute\AsSlotHandler $meta */
                         $meta = $attr->newInstance();
                         \Semitexa\Ssr\Layout\SlotHandlerRegistry::register(
                             slotClass: $meta->slot,
