@@ -22,10 +22,15 @@ final class ClassDiscoveryTest extends TestCase
             ProjectRoot::reset();
             $this->setProjectRoot($root);
 
+            if (!@chmod($brokenDir, 0000) || is_readable($brokenDir)) {
+                self::markTestSkipped('Unreadable child directories cannot be enforced on this platform.');
+            }
+
             $discovery = new ClassDiscovery();
             $classMap = $discovery->getClassMap();
 
             self::assertArrayHasKey('Semitexa\\Fixture\\GoodCommand', $classMap);
+            self::assertArrayNotHasKey('Semitexa\\Fixture\\Broken\\BadCommand', $classMap);
         } finally {
             @chmod($brokenDir, 0777);
             ProjectRoot::reset();
@@ -80,8 +85,6 @@ final class BadCommand
 }
 PHP,
         );
-
-        chmod($brokenDir, 0000);
 
         return [
             'root' => $root,

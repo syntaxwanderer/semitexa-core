@@ -163,7 +163,7 @@ class ClassDiscovery
                         $dir,
                         \FilesystemIterator::SKIP_DOTS,
                     ),
-                    \RecursiveIteratorIterator::SELF_FIRST,
+                    \RecursiveIteratorIterator::LEAVES_ONLY,
                     \RecursiveIteratorIterator::CATCH_GET_CHILD,
                 );
 
