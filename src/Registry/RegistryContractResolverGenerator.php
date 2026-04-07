@@ -274,26 +274,47 @@ PHP;
         /** @var array<string, string> $usedShortNames */
         $usedShortNames = [];
         $params = [];
-        $paramNames = [];
         foreach ($implementations as $impl) {
             $implClass = $impl['class'];
             $typeHint = self::addImport($implClass, $imports, $usedShortNames);
-            $paramName = self::uniqueParamName($implClass, $paramNames);
-            $paramNames[] = $paramName;
-            $params[] = "        private {$typeHint} \${$paramName},";
+            $paramName = self::uniqueParamName($implClass, array_map(
+                static fn(array $parameter): string => $parameter['name'],
+                $params,
+            ));
+            $params[] = [
+                'name' => $paramName,
+                'type' => $typeHint,
+            ];
         }
-        $paramsStr = implode("\n", $params);
-        $paramsStr = rtrim($paramsStr, ',');
-
         $activeParamName = '';
         foreach ($implementations as $i => $impl) {
             if ($impl['class'] === $active) {
-                $activeParamName = $paramNames[$i];
+                $activeParamName = $params[$i]['name'];
                 break;
             }
         }
         if ($activeParamName === '') {
-            $activeParamName = $paramNames[0];
+            $activeParamName = $params[0]['name'];
+        }
+
+        $paramLines = [];
+        $unusedParamNames = [];
+        foreach ($params as $param) {
+            $paramLines[] = "        {$param['type']} \${$param['name']},";
+            if ($param['name'] !== $activeParamName) {
+                $unusedParamNames[] = $param['name'];
+            }
+        }
+        $paramsStr = implode("\n", $paramLines);
+        $paramsStr = rtrim($paramsStr, ',');
+
+        $unusedParamUsage = '';
+        if ($unusedParamNames !== []) {
+            $unusedList = implode(', ', array_map(
+                static fn(string $name): string => '$' . $name,
+                $unusedParamNames,
+            ));
+            $unusedParamUsage = "        \$unusedDependencies = [{$unusedList}];\n        unset(\$unusedDependencies);\n";
         }
 
         $interfaceTypeHint = self::addImport($interface, $imports, $usedShortNames);
@@ -317,13 +338,17 @@ namespace App\Registry\Contracts;
  */
 final class {$resolverShortName}
 {
+    private {$interfaceTypeHint} \$contract;
+
     public function __construct(
 {$paramsStr}
-    ) {}
+    ) {
+        \$this->contract = \${$activeParamName};
+{$unusedParamUsage}    }
 
     public function getContract(): {$interfaceTypeHint}
     {
-        return \$this->{$activeParamName};
+        return \$this->contract;
     }
 }
 
