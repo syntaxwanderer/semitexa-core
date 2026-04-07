@@ -19,7 +19,7 @@ final class ServiceContractRegistry
 {
     /**
      * Single source of truth: per-interface implementations and active class.
-     * @var array<string, array{implementations: list<array{module: string, class: string, factoryKey?: \BackedEnum|null}>, active: string}>
+     * @var array<class-string, array{implementations: list<array{module: string, class: class-string, factoryKey?: \BackedEnum|null}>, active: class-string}>
      */
     private array $contractDetails = [];
     private readonly ClassDiscovery $classDiscovery;
@@ -35,7 +35,7 @@ final class ServiceContractRegistry
     }
 
     /**
-     * @return array<string, string>
+     * @return array<class-string, class-string>
      */
     public function getContracts(): array
     {
@@ -47,7 +47,7 @@ final class ServiceContractRegistry
     }
 
     /**
-     * @return array<string, array{implementations: list<array{module: string, class: string, factoryKey?: \BackedEnum|null}>, active: string}>
+     * @return array<class-string, array{implementations: list<array{module: string, class: class-string, factoryKey?: \BackedEnum|null}>, active: class-string}>
      */
     public function getContractDetails(): array
     {
@@ -62,7 +62,7 @@ final class ServiceContractRegistry
             $this->classDiscovery->findClassesWithAttribute(SatisfiesRepositoryContract::class)
         ));
 
-        /** @var array<string, array<int, array{module: string, impl: string, factoryKey?: \BackedEnum|null}>> */
+        /** @var array<class-string, array<int, array{module: string, impl: class-string, factoryKey?: \BackedEnum|null}>> */
         $byInterface = [];
 
         foreach ($candidates as $implClass) {
@@ -96,6 +96,7 @@ final class ServiceContractRegistry
                     if (!interface_exists($interface) || !$ref->implementsInterface($interface)) {
                         continue;
                     }
+                    /** @var class-string $implClass */
                     $entry = ['module' => $moduleName, 'impl' => $implClass];
                     if ($attr instanceof SatisfiesServiceContract) {
                         $entry['factoryKey'] = $attr->factoryKey;
@@ -124,17 +125,20 @@ final class ServiceContractRegistry
                 }
             }
             if ($winner !== null) {
+                /** @var class-string $interface */
                 $this->contractDetails[$interface] = [
-                    'implementations' => array_map(
+                    'implementations' => array_values(array_map(
                         static function (array $item): array {
-                            $row = ['module' => $item['module'], 'class' => $item['impl']];
+                            /** @var class-string $implClass */
+                            $implClass = $item['impl'];
+                            $row = ['module' => $item['module'], 'class' => $implClass];
                             if (array_key_exists('factoryKey', $item)) {
                                 $row['factoryKey'] = $item['factoryKey'];
                             }
                             return $row;
                         },
                         $candidatesList
-                    ),
+                    )),
                     'active' => $winner,
                 ];
             }

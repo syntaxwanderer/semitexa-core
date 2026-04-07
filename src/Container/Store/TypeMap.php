@@ -13,13 +13,13 @@ namespace Semitexa\Core\Container\Store;
  */
 final class TypeMap
 {
-    /** @var array<class-string, class-string> Interface → active concrete class */
+    /** @var array<string, class-string> Interface → active concrete class */
     public array $contractBindings = [];
 
     /** @var array<class-string, true> All registered concrete classes */
     public array $registeredClasses = [];
 
-    /** @var array<class-string, class-string> Interface → resolver class (dynamic resolution) */
+    /** @var array<string, class-string> Interface → resolver class (dynamic resolution) */
     public array $interfaceToResolver = [];
 
     /** @var array<class-string, true> Execution-scoped classes (cloned per request) */
@@ -31,7 +31,7 @@ final class TypeMap
      *
      * @param array<string, class-string> $idToClass
      * @param array<class-string, true> $executionScopedClasses
-     * @param array<class-string, class-string> $interfaceToResolver
+     * @param array<string, class-string> $interfaceToResolver
      */
     public function populateFromBuildArrays(
         array $idToClass,
@@ -69,8 +69,9 @@ final class TypeMap
     public function resolveClass(string $id): ?string
     {
         if (isset($this->registeredClasses[$id])) {
-            /** @var class-string $id */
-            return $id;
+            /** @var class-string $class */
+            $class = $id;
+            return $class;
         }
 
         return $this->contractBindings[$id] ?? null;

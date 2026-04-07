@@ -48,7 +48,7 @@ final class ErrorRouteDispatcher
     }
 
     /**
-     * @param array{name?: string}|null $currentRoute
+     * @param array<string, mixed>|null $currentRoute
      */
     public function dispatchStatus(int $statusCode, Request $request, ?array $currentRoute = null): ?HttpResponse
     {
@@ -56,7 +56,7 @@ final class ErrorRouteDispatcher
     }
 
     /**
-     * @param array{name?: string}|null $currentRoute
+     * @param array<string, mixed>|null $currentRoute
      */
     public function dispatchThrowable(\Throwable $throwable, Request $request, ?array $currentRoute = null): ?HttpResponse
     {
@@ -68,7 +68,7 @@ final class ErrorRouteDispatcher
     }
 
     /**
-     * @param array{name?: string}|null $currentRoute
+     * @param array<string, mixed>|null $currentRoute
      */
     private function dispatch(
         int $statusCode,
@@ -96,6 +96,7 @@ final class ErrorRouteDispatcher
         }
 
         try {
+            /** @var HandlerRegistry|null $handlerRegistry */
             $handlerRegistry = $this->container->has(HandlerRegistry::class)
                 ? $this->container->get(HandlerRegistry::class)
                 : null;
@@ -154,7 +155,7 @@ final class ErrorRouteDispatcher
     }
 
     /**
-     * @param array{name?: string}|null $currentRoute
+     * @param array<string, mixed>|null $currentRoute
      */
     private function buildContext(
         int $statusCode,
@@ -170,6 +171,10 @@ final class ErrorRouteDispatcher
             ? 'The requested resource was not found.'
             : 'An unexpected error occurred.';
 
+        $originalRouteName = is_array($currentRoute) && is_string($currentRoute['name'] ?? null)
+            ? $currentRoute['name']
+            : null;
+
         return new ErrorPageContext(
             statusCode: $normalizedStatus,
             reasonPhrase: $status->reason(),
@@ -181,7 +186,7 @@ final class ErrorRouteDispatcher
             exceptionClass: $throwable !== null ? get_debug_type($throwable) : null,
             debugMessage: $debugEnabled && $throwable !== null ? $throwable->getMessage() : null,
             trace: $debugEnabled && $throwable !== null ? $throwable->getTraceAsString() : null,
-            originalRouteName: $currentRoute['name'] ?? null,
+            originalRouteName: $originalRouteName,
         );
     }
 

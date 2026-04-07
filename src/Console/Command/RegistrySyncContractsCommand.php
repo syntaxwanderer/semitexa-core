@@ -43,7 +43,7 @@ class RegistrySyncContractsCommand extends BaseCommand
         $contractRegistry = new ServiceContractRegistry($this->classDiscovery, $this->moduleRegistry);
         $details = $contractRegistry->getContractDetails();
         $multiImpl = array_filter($details, function(array $d): bool {
-            return isset($d['implementations']) && count($d['implementations']) >= 2;
+            return count($d['implementations']) >= 2;
         });
 
         $generated = RegistryContractResolverGenerator::generateAll($multiImpl);

@@ -21,6 +21,7 @@ use ReflectionNamedType;
  * @phpstan-type InjectionsMap array<class-string, array<string, array{kind: string, type: class-string}>>
  * @phpstan-type IdToClassMap array<string, class-string>
  * @phpstan-type ObjectMap array<string, object>
+ * @phpstan-type FactoryMap array<string, ContractFactory>
  */
 final class GraphBuilder
 {
@@ -73,7 +74,7 @@ final class GraphBuilder
      * @param InjectionsMap $injections
      * @param ObjectMap $readonlyInstances
      * @param IdToClassMap $idToClass (mutated: registers prototypes)
-     * @param ObjectMap $executionScopedPrototypes (mutated in place)
+     * @param array<class-string, object> $executionScopedPrototypes (mutated in place)
      * @param callable(string): ?string $resolveToClass
      */
     public function buildExecutionScopedPrototypes(
@@ -132,7 +133,7 @@ final class GraphBuilder
      * @param array<class-string, class-string> $interfaceToResolver
      * @param ObjectMap $readonlyInstances
      * @param ObjectMap $executionScopedPrototypes
-     * @param ObjectMap $factories (mutated in place)
+     * @param FactoryMap $factories (mutated in place)
      */
     public function buildFactories(
         array $contractDetails,
@@ -208,7 +209,7 @@ final class GraphBuilder
     /**
      * Inject factory instances into execution-scoped prototypes that have InjectAsFactory.
      *
-     * @param ObjectMap $executionScopedPrototypes
+     * @param array<class-string, object> $executionScopedPrototypes
      * @param InjectionsMap $injections
      * @param ObjectMap $factories
      */

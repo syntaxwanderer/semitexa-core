@@ -308,7 +308,7 @@ final class ResponseRenderer
 
         $alternates = [];
         foreach ($produces as $mime) {
-            if (!is_string($mime) || $mime === '') {
+            if ($mime === '') {
                 continue;
             }
 
