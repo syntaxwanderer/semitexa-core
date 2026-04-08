@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Console\Command;
 
 use Semitexa\Core\Attribute\AsCommand;
+use Semitexa\Core\Console\Runtime\ClearCacheAction;
 use Semitexa\Core\Console\Runtime\ReloadRuntimeAction;
 use Semitexa\Core\Console\Runtime\VerifyRuntimeAction;
 use Symfony\Component\Console\Command\Command;
@@ -34,13 +35,17 @@ class ServerReloadCommand extends Command
 
         $io->title('Reloading Swoole Workers');
 
-        // 1. Reload: send SIGUSR1
+        // 1. Clear cache (twig, etc.)
+        $clearCache = new ClearCacheAction($io);
+        $clearCache->execute();
+
+        // 2. Reload: send SIGUSR1
         $reload = new ReloadRuntimeAction($io);
         if (!$reload->execute()) {
             return Command::FAILURE;
         }
 
-        // 2. Verify: health check only (no build marker check)
+        // 3. Verify: health check only (no build marker check)
         // Give workers a moment to cycle
         sleep(2);
 
