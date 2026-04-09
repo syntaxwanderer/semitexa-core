@@ -17,6 +17,7 @@ use Semitexa\Core\Pipeline\RouteExecutor;
 use Semitexa\Core\Request;
 use Semitexa\Core\Exception\RoutingException;
 use Semitexa\Core\HttpResponse;
+use Semitexa\Core\Log\FallbackErrorLogger;
 
 /**
  * @internal Matches the request to a route and executes it.
@@ -126,7 +127,12 @@ final class RoutePhase
             }
             $logger->error($e->getMessage(), $context);
         } else {
-            error_log("[Semitexa] Critical Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            FallbackErrorLogger::log('Critical error', [
+                'message' => $e->getMessage(),
+                'exception' => $e::class,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
         }
 
         $response = $this->errorRouteDispatcher->dispatchThrowable($e, $request, $route?->toArray());

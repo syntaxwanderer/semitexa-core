@@ -17,7 +17,7 @@ use PHPStan\Rules\RuleErrorBuilder;
  * Flags direct error_log() calls. Use LoggerInterface or SsrLogger instead.
  *
  * Exceptions: ServerLifecycleFallbackLogger and BootDiagnostics (pre-container boot),
- * and SsrLogger (the fallback wrapper itself).
+ * FallbackErrorLogger, SsrLogger (the fallback wrapper itself), and AsyncJsonLogger.
  *
  * @implements Rule<FuncCall>
  */
@@ -26,6 +26,7 @@ final class DisallowErrorLogRule implements Rule
     private const ALLOWED_CLASSES = [
         'Semitexa\\Core\\Server\\ServerLifecycleFallbackLogger',
         'Semitexa\\Core\\Discovery\\BootDiagnostics',
+        'Semitexa\\Core\\Log\\FallbackErrorLogger',
         'Semitexa\\Ssr\\Log\\SsrLogger',
         'Semitexa\\Core\\Log\\AsyncJsonLogger',
     ];

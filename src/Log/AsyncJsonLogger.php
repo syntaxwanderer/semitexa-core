@@ -144,7 +144,17 @@ final class AsyncJsonLogger implements LoggerInterface
             $line .= json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
         }
         if (@file_put_contents($path, $line, FILE_APPEND | LOCK_EX) === false) {
-            error_log('[Semitexa] Logger write failed, falling back to stderr: ' . trim($line));
+            $lastError = error_get_last();
+            $errorMessage = is_array($lastError)
+                ? $lastError['message']
+                : 'unknown error';
+
+            error_log(sprintf(
+                '[Semitexa] Logger write failed: path=%s entries=%d error=%s',
+                $path,
+                count($entries),
+                $errorMessage,
+            ));
         }
     }
 
