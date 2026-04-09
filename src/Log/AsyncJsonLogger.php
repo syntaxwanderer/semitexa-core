@@ -143,6 +143,7 @@ final class AsyncJsonLogger implements LoggerInterface
         foreach ($entries as $entry) {
             $line .= json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
         }
+        error_clear_last();
         if (@file_put_contents($path, $line, FILE_APPEND | LOCK_EX) === false) {
             $lastError = error_get_last();
             $errorMessage = is_array($lastError)

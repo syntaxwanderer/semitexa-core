@@ -6,6 +6,19 @@ namespace Semitexa\Core\Log;
 
 final class FallbackErrorLogger
 {
+    private const CONTROL_CHARACTER_ESCAPE_MAP = [
+        "\0" => '\\0',
+        "\a" => '\\a',
+        "\b" => '\\b',
+        "\t" => '\\t',
+        "\n" => '\\n',
+        "\v" => '\\v',
+        "\f" => '\\f',
+        "\r" => '\\r',
+        "\e" => '\\e',
+        "\177" => '\\x7f',
+    ];
+
     /**
      * @param array<array-key, mixed> $context
      */
@@ -27,11 +40,26 @@ final class FallbackErrorLogger
                 $formatted = is_string($encoded) ? $encoded : '[unserializable]';
             }
 
-            $parts[] = sprintf('%s=%s', $key, $formatted);
+            $parts[] = sprintf(
+                '%s=%s',
+                self::escapeControlCharacters((string) $key),
+                self::escapeControlCharacters($formatted),
+            );
         }
 
         $suffix = $parts === [] ? '' : ' ' . implode(' ', $parts);
 
-        error_log(sprintf('[Semitexa] %s%s', $message, $suffix));
+        error_log(sprintf('[Semitexa] %s%s', self::escapeControlCharacters($message), $suffix));
+    }
+
+    private static function escapeControlCharacters(string $value): string
+    {
+        $escaped = strtr($value, self::CONTROL_CHARACTER_ESCAPE_MAP);
+
+        return (string) preg_replace_callback(
+            '/[\x01-\x06\x0E-\x1F]/',
+            static fn (array $matches): string => sprintf('\\x%02X', ord($matches[0])),
+            $escaped,
+        );
     }
 }
