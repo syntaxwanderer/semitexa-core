@@ -41,6 +41,7 @@ class QueueTransportRegistry
 
         self::register('in-memory', new InMemoryTransportFactory());
         self::register('memory', new InMemoryTransportFactory());
+        self::registerOptionalNatsTransport();
 
         self::$initialized = true;
     }
@@ -73,5 +74,39 @@ class QueueTransportRegistry
         self::$factories = [];
         self::$instances = [];
         self::$initialized = false;
+    }
+
+    private static function registerOptionalNatsTransport(): void
+    {
+        if (!self::hasNatsConfiguration()) {
+            return;
+        }
+
+        $clusterRegistryClass = 'Semitexa\\Ledger\\Nats\\ClusterRegistry';
+        $transportFactoryClass = 'Semitexa\\Ledger\\Queue\\NatsTransportFactory';
+
+        if (!class_exists($clusterRegistryClass) || !class_exists($transportFactoryClass)) {
+            return;
+        }
+
+        try {
+            $clusters = $clusterRegistryClass::fromEnv();
+            if (method_exists($clusters, 'connect')) {
+                $clusters->connect();
+            }
+
+            self::register('nats', new $transportFactoryClass($clusters));
+        } catch (\Throwable $e) {
+            error_log('[semitexa-core] Failed to register NATS queue transport: ' . $e->getMessage());
+        }
+    }
+
+    private static function hasNatsConfiguration(): bool
+    {
+        $primary = getenv('NATS_PRIMARY_URL');
+        $fallback = getenv('NATS_URL');
+
+        return ($primary !== false && $primary !== '')
+            || ($fallback !== false && $fallback !== '');
     }
 }

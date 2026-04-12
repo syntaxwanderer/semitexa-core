@@ -43,6 +43,11 @@ Project-specific guidance lives in `docs/`. Detailed framework reference stays i
 3.  Inject: In consumers use **property injection** — `#[InjectAsReadonly]`, `#[InjectAsMutable]`, or `#[InjectAsFactory]` on protected properties. No constructor injection. See **vendor/semitexa/core/docs/SERVICE_CONTRACTS.md** and **vendor/semitexa/core/src/Container/README.md**.
 
 ## 🔍 Discovery
+- **Project Graph (use FIRST)**: Before reading source files, run `bin/semitexa ai:review-graph:generate --json` then `bin/semitexa ai:review-graph:stats --json`. This gives you the full structural map of the codebase — modules, classes, dependencies, event flows, execution paths. See **packages/semitexa-project-graph/docs/AI_INTEGRATION.md** for the full guide.
+  - `ai:review-graph:context "<task>" --format=json` — get relevant context for any task
+  - `ai:review-graph:event-trace <Event> --format=json` — trace full event lifecycle
+  - `ai:review-graph:flow-trace <Flow> --format=json` — trace execution flow
+  - `ai:review-graph:impact <Component> --format=json` — analyze blast radius of changes
 - **Routes**: Built from `src/Registry/Payloads/` (generated); module request DTOs live in `Application/Payload/Request/`. Session/Event DTOs in `Payload/Session/`, `Payload/Event/`. See **vendor/semitexa/core/docs/MODULE_STRUCTURE.md**.
 - **Modules**: Discovered via `composer.json` in `src/modules/*` and `packages/*` (or vendor).
 
