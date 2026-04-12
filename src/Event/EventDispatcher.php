@@ -8,6 +8,7 @@ use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Exception\ConfigurationException;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Core\Container\ContainerFactory;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Core\Queue\QueueConfig;
 use Semitexa\Core\Queue\QueueTransportRegistry;
 use Semitexa\Core\Support\PayloadSerializer;
@@ -23,6 +24,15 @@ final class EventDispatcher implements EventDispatcherInterface
 {
     #[InjectAsReadonly]
     protected EventListenerRegistry $eventListenerRegistry;
+
+    /**
+     * Callbacks invoked after listener handling has been initiated for every dispatched event.
+     * Sync listeners have completed; async and queued listeners may still be running elsewhere.
+     * Registered by packages (e.g. semitexa-ledger) at worker boot.
+     *
+     * @var list<callable(object): void>
+     */
+    private array $postDispatchHooks = [];
     /**
      * Create an event instance. Use this instead of "new Event()" so the framework
      * can apply initialization, validation, or optimizations now or later.
@@ -53,8 +63,20 @@ final class EventDispatcher implements EventDispatcherInterface
     }
 
     /**
+     * Register a callback to run after listener handling has been initiated for every dispatched event.
+     * Used by semitexa-ledger to hook LedgerWriter into the dispatch pipeline.
+     *
+     * @param callable(object): void $hook
+     */
+    public function addPostDispatchHook(callable $hook): void
+    {
+        $this->postDispatchHooks[] = $hook;
+    }
+
+    /**
      * Dispatch event to all registered listeners. Sync listeners run immediately;
      * async listeners are enqueued (same queue as async payload handlers).
+     * Post-dispatch hooks run after sync listeners complete and async/queued work has been scheduled.
      */
     public function dispatch(object $event): void
     {
@@ -69,6 +91,18 @@ final class EventDispatcher implements EventDispatcherInterface
                 EventExecution::Async => $this->runListenerDefer($meta, $event),
                 EventExecution::Queued => $this->enqueueListener($meta, $event),
             };
+        }
+
+        foreach ($this->postDispatchHooks as $hook) {
+            try {
+                $hook($event);
+            } catch (\Throwable $e) {
+                StaticLoggerBridge::error('core', 'Post-dispatch hook failed', [
+                    'event' => $eventClass,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
     }
 

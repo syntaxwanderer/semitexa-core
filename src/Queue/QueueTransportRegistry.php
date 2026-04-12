@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Queue;
 
+use Semitexa\Core\Environment;
 use Semitexa\Core\Exception\ConfigurationException;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Core\Queue\Transport\InMemoryTransportFactory;
-use Semitexa\Core\Queue\Transport\RabbitMqTransportFactory;
 
 /**
  * Registry of queue transport factories.
  *
  * Factories are registered at boot (worker-scoped). Transport instances are
- * cached per-key so each worker reuses the same connection. This is safe
- * because transports with stateful connections (RabbitMQ) are only used
- * in the queue:work CLI process (single coroutine).
+ * cached per-key so each worker reuses the same connection. The 'nats'
+ * transport is registered by LedgerBootstrap when semitexa-ledger is loaded.
  *
  * @worker-scoped Initialized once per worker, read-only during requests.
  */
@@ -43,7 +43,7 @@ class QueueTransportRegistry
 
         self::register('in-memory', new InMemoryTransportFactory());
         self::register('memory', new InMemoryTransportFactory());
-        self::register('rabbitmq', new RabbitMqTransportFactory());
+        self::registerOptionalNatsTransport();
 
         self::$initialized = true;
     }
@@ -68,6 +68,13 @@ class QueueTransportRegistry
         return self::$instances[$key];
     }
 
+    public static function has(string $name): bool
+    {
+        self::initialize();
+
+        return isset(self::$factories[strtolower($name)]);
+    }
+
     /**
      * Reset registry state. For testing only.
      */
@@ -76,5 +83,38 @@ class QueueTransportRegistry
         self::$factories = [];
         self::$instances = [];
         self::$initialized = false;
+    }
+
+    private static function registerOptionalNatsTransport(): void
+    {
+        if (!self::hasNatsConfiguration()) {
+            return;
+        }
+
+        $clusterRegistryClass = 'Semitexa\\Ledger\\Nats\\ClusterRegistry';
+        $transportFactoryClass = 'Semitexa\\Ledger\\Queue\\NatsTransportFactory';
+
+        if (!class_exists($clusterRegistryClass) || !class_exists($transportFactoryClass)) {
+            return;
+        }
+
+        try {
+            $clusters = $clusterRegistryClass::fromEnv();
+            self::register('nats', new $transportFactoryClass($clusters));
+        } catch (\Throwable $e) {
+            StaticLoggerBridge::error('core', 'Failed to register NATS queue transport', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private static function hasNatsConfiguration(): bool
+    {
+        $primary = Environment::getEnvValue('NATS_PRIMARY_URL');
+        $fallback = Environment::getEnvValue('NATS_URL');
+
+        return ($primary !== null && $primary !== '')
+            || ($fallback !== null && $fallback !== '');
     }
 }
