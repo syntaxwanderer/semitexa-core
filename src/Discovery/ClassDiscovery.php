@@ -52,6 +52,10 @@ class ClassDiscovery
      */
     private function loadComposerClassMap(string $path): array
     {
+        if (!is_file($path) || !is_readable($path)) {
+            return [];
+        }
+
         $loaded = require $path;
         if (!is_array($loaded)) {
             return [];
@@ -73,6 +77,10 @@ class ClassDiscovery
      */
     private function loadComposerPsr4Map(string $path): array
     {
+        if (!is_file($path) || !is_readable($path)) {
+            return [];
+        }
+
         $loaded = require $path;
         if (!is_array($loaded)) {
             return [];
