@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Queue;
 
 use Semitexa\Core\Exception\ConfigurationException;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Core\Queue\Transport\InMemoryTransportFactory;
 
 /**
@@ -97,7 +98,10 @@ class QueueTransportRegistry
 
             self::register('nats', new $transportFactoryClass($clusters));
         } catch (\Throwable $e) {
-            error_log('[semitexa-core] Failed to register NATS queue transport: ' . $e->getMessage());
+            StaticLoggerBridge::error('core', 'Failed to register NATS queue transport', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 

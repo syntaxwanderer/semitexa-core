@@ -18,4 +18,11 @@ interface EventDispatcherInterface
      * Dispatch event to all registered listeners (sync / async / queued by listener config).
      */
     public function dispatch(object $event): void;
+
+    /**
+     * Register a callback that runs after listener handling has been initiated for a dispatched event.
+     *
+     * @param callable(object): void $hook
+     */
+    public function addPostDispatchHook(callable $hook): void;
 }

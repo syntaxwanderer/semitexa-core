@@ -8,6 +8,7 @@ use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Exception\ConfigurationException;
 use Semitexa\Core\Attribute\SatisfiesServiceContract;
 use Semitexa\Core\Container\ContainerFactory;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Core\Queue\QueueConfig;
 use Semitexa\Core\Queue\QueueTransportRegistry;
 use Semitexa\Core\Support\PayloadSerializer;
@@ -25,7 +26,8 @@ final class EventDispatcher implements EventDispatcherInterface
     protected EventListenerRegistry $eventListenerRegistry;
 
     /**
-     * Callbacks invoked after all listeners for every dispatched event.
+     * Callbacks invoked after listener handling has been initiated for every dispatched event.
+     * Sync listeners have completed; async and queued listeners may still be running elsewhere.
      * Registered by packages (e.g. semitexa-ledger) at worker boot.
      *
      * @var list<callable(object): void>
@@ -61,7 +63,7 @@ final class EventDispatcher implements EventDispatcherInterface
     }
 
     /**
-     * Register a callback to run after all listeners for every dispatched event.
+     * Register a callback to run after listener handling has been initiated for every dispatched event.
      * Used by semitexa-ledger to hook LedgerWriter into the dispatch pipeline.
      *
      * @param callable(object): void $hook
@@ -74,7 +76,7 @@ final class EventDispatcher implements EventDispatcherInterface
     /**
      * Dispatch event to all registered listeners. Sync listeners run immediately;
      * async listeners are enqueued (same queue as async payload handlers).
-     * Post-dispatch hooks run after all listeners.
+     * Post-dispatch hooks run after sync listeners complete and async/queued work has been scheduled.
      */
     public function dispatch(object $event): void
     {
@@ -92,7 +94,15 @@ final class EventDispatcher implements EventDispatcherInterface
         }
 
         foreach ($this->postDispatchHooks as $hook) {
-            $hook($event);
+            try {
+                $hook($event);
+            } catch (\Throwable $e) {
+                StaticLoggerBridge::error('core', 'Post-dispatch hook failed', [
+                    'event' => $eventClass,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
     }
 
