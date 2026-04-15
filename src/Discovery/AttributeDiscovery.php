@@ -700,7 +700,7 @@ class AttributeDiscovery
             'defaults' => $attr['defaults'] ?? [],
             'options' => $attr['options'] ?? [],
             'tags' => $attr['tags'] ?? [],
-            'public' => $attr['public'] ?? true,
+            'public' => $attr['public'] ?? false,
             'responseWith' => $attr['responseWith'],
             'consumes' => $attr['consumes'] ?? null,
             'produces' => $attr['produces'] ?? null,
