@@ -301,17 +301,11 @@ class RouteExecutor
     }
 
     /**
-     * Check if debug mode is enabled via the request's environment.
+     * Check if debug mode is enabled via the application environment configuration.
      */
-    private static function isDebugMode(?Request $request): bool
+    private static function isDebugMode(?Request $_request): bool
     {
-        if ($request === null) {
-            return false;
-        }
-        $debug = $_ENV['APP_DEBUG'] ?? null;
-        if ($debug === null) {
-            $debug = getenv('APP_DEBUG');
-        }
+        $debug = \Semitexa\Core\Environment::create()->appDebug ?? false;
         return filter_var($debug, FILTER_VALIDATE_BOOL);
     }
 }

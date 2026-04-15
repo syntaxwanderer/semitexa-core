@@ -27,10 +27,24 @@ final class ResponseRenderer
                 // Security: validate redirect URL to prevent open redirect attacks (VULN-006)
                 $parsed = parse_url($redirectUrl);
                 if ($parsed !== false && isset($parsed['host'])) {
-                    $requestHost = $request->getHeader('Host') ?? '';
-                    if ($parsed['host'] !== $requestHost && $parsed['host'] !== 'localhost' && $parsed['host'] !== '127.0.0.1') {
+                    // Only allow http/https schemes for absolute URLs
+                    if (isset($parsed['scheme']) && !in_array($parsed['scheme'], ['http', 'https'], true)) {
                         $redirectUrl = '/';
+                    } else {
+                        // Normalize: strip port from request host before comparison
+                        $requestHost = $request->getHeader('Host') ?? '';
+                        $requestHost = parse_url("http://{$requestHost}")['host'] ?? $requestHost;
+                        $redirectHost = strtolower($parsed['host']);
+                        $requestHost = strtolower($requestHost);
+                        if ($redirectHost !== $requestHost && $redirectHost !== 'localhost' && $redirectHost !== '127.0.0.1') {
+                            $redirectUrl = '/';
+                        }
                     }
+                } elseif ($parsed !== false && !isset($parsed['host'])) {
+                    // Relative URL or scheme-relative — allowed
+                } else {
+                    // Unparseable or scheme without host (e.g. javascript:) — reject
+                    $redirectUrl = '/';
                 }
             } else {
                 $redirectUrl = '';

@@ -41,10 +41,10 @@ final class SwooleResponseEmitter implements ResponseEmitterInterface
     /**
      * Parse a raw Set-Cookie header line into arguments for Swoole's rawCookie().
      *
-     * Security: defaults to secure cookie attributes (VULN-012):
-     * - HttpOnly: true (prevent JavaScript access)
-     * - Secure: true (require HTTPS)
-     * - SameSite: Lax (CSRF protection)
+     * Cookie attributes (Secure, HttpOnly, SameSite) are parsed from the
+     * Set-Cookie line when present. Callers should set these attributes
+     * explicitly at the cookie creation site (e.g. CookieJar) based on
+     * environment and request scheme.
      *
      * @return array{0: string, 1: string, 2: int, 3: string, 4: string, 5: bool, 6: bool, 7: string}
      */
@@ -56,9 +56,9 @@ final class SwooleResponseEmitter implements ResponseEmitterInterface
         $expires = 0;
         $path = '/';
         $domain = '';
-        // Security defaults — can be overridden by explicit cookie attributes
-        $secure = true;
-        $httpOnly = true;
+        // Defaults — can be overridden by explicit cookie attributes in the Set-Cookie line
+        $secure = false;
+        $httpOnly = false;
         $sameSite = 'Lax';
 
         for ($i = 1, $n = count($parts); $i < $n; $i++) {
