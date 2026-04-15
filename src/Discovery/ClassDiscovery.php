@@ -124,6 +124,7 @@ class ClassDiscovery
         foreach ($this->classMap as $className => $filePath) {
             if (str_starts_with($className, 'Semitexa\\Core\\Composer\\')
                 || str_starts_with($className, 'App\\Tests\\')
+                || str_contains($className, '\\Tests\\')
             ) {
                 continue;
             }

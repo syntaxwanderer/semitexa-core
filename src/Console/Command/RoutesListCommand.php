@@ -44,7 +44,7 @@ class RoutesListCommand extends BaseCommand
                     'name' => $route['name'] ?? null,
                     'class' => $route['class'] ?? '',
                     'module' => $this->detectModule($route['class'] ?? ''),
-                    'public' => $route['public'] ?? true,
+                    'public' => $route['public'] ?? false,
                 ];
             }
             $output->writeln(json_encode($rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
@@ -69,7 +69,7 @@ class RoutesListCommand extends BaseCommand
                 $route['name'] ?? '-',
                 $route['class'] ?? '',
                 $this->detectModule($route['class'] ?? ''),
-                ($route['public'] ?? true) ? 'yes' : 'no',
+                ($route['public'] ?? false) ? 'yes' : 'no',
             ];
         }
 

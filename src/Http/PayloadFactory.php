@@ -46,7 +46,7 @@ final class PayloadFactory
     private static function buildWrapperClass(string $signature, string $baseClass, array $traits): string
     {
         // Security: validate all class/trait names against strict FQCN pattern
-        // to prevent code injection via eval() (VULN-001)
+        // to prevent code injection via eval() (VULN-004)
         if (!preg_match('/^[A-Za-z0-9_\\\\]+$/', $baseClass)) {
             throw new \InvalidArgumentException(
                 'Invalid base class name for PayloadFactory. Only alphanumeric, underscore, and backslash allowed.'
@@ -57,6 +57,23 @@ final class PayloadFactory
             if (!preg_match('/^[A-Za-z0-9_\\\\]+$/', $trait)) {
                 throw new \InvalidArgumentException(
                     "Invalid trait name '{$trait}' for PayloadFactory. Only alphanumeric, underscore, and backslash allowed."
+                );
+            }
+        }
+
+        // Require that both the base class and all traits are already autoloaded.
+        // This prevents the autoloader from executing attacker-controlled paths
+        // and ensures the eval() body is fully predictable.
+        if (!class_exists($baseClass, false)) {
+            throw new \InvalidArgumentException(
+                "Base class '{$baseClass}' does not exist or has not been loaded."
+            );
+        }
+
+        foreach ($traits as $trait) {
+            if (!trait_exists($trait, false)) {
+                throw new \InvalidArgumentException(
+                    "Trait '{$trait}' does not exist or has not been loaded."
                 );
             }
         }
