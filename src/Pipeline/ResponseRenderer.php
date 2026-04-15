@@ -36,7 +36,18 @@ final class ResponseRenderer
                         $requestHost = parse_url("http://{$requestHost}")['host'] ?? $requestHost;
                         $redirectHost = strtolower($parsed['host']);
                         $requestHost = strtolower($requestHost);
-                        if ($redirectHost !== $requestHost && $redirectHost !== 'localhost' && $redirectHost !== '127.0.0.1') {
+                        // Allow same-host, localhost, and known OAuth provider domains
+                        $allowedExternalHosts = [
+                            'accounts.google.com',
+                            'login.microsoftonline.com',
+                            'github.com',
+                            'login.live.com',
+                            'appleid.apple.com',
+                        ];
+                        if ($redirectHost !== $requestHost
+                            && $redirectHost !== 'localhost'
+                            && $redirectHost !== '127.0.0.1'
+                            && !in_array($redirectHost, $allowedExternalHosts, true)) {
                             $redirectUrl = '/';
                         }
                     }
