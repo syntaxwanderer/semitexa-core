@@ -408,7 +408,10 @@ class AttributeDiscovery
                 );
             }
 
-            $transport = $resolved['transport'] ?? TransportType::HTTP;
+            $transport = $resolved['transport'] ?? TransportType::Http;
+            $transportValue = $transport instanceof TransportType
+                ? $transport->value
+                : (is_string($transport) && $transport !== '' ? $transport : TransportType::Http->value);
             $this->routeRegistry->register([
                 'path' => $resolved['path'],
                 'methods' => $resolved['methods'],
@@ -422,7 +425,7 @@ class AttributeDiscovery
                 'tags' => $resolved['tags'],
                 'public' => $resolved['public'],
                 'type' => 'http-request',
-                'transport' => $transport instanceof TransportType ? $transport->value : (string) $transport,
+                'transport' => $transportValue,
                 'consumes' => $resolved['consumes'] ?? null,
                 'produces' => $routeProduces,
                 'module' => $selectedModule,
@@ -708,7 +711,7 @@ class AttributeDiscovery
             'responseWith' => $attr['responseWith'],
             'consumes' => $attr['consumes'] ?? null,
             'produces' => $attr['produces'] ?? null,
-            'transport' => $attr['transport'] ?? TransportType::HTTP,
+            'transport' => $attr['transport'] ?? TransportType::Http,
         ];
     }
 

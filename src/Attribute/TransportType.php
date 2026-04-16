@@ -7,7 +7,7 @@ namespace Semitexa\Core\Attribute;
 /**
  * Defines the transport mechanism for a payload endpoint.
  *
- * Used in #[AsPayload(transport: TransportType::SSE)] to explicitly classify
+ * Used in #[AsPayload(transport: TransportType::Sse)] to explicitly classify
  * how the endpoint communicates with clients. Defaults to HTTP.
  *
  * Downstream systems (e.g. sitemap generation, API schema) use this to make
@@ -16,10 +16,10 @@ namespace Semitexa\Core\Attribute;
 enum TransportType: string
 {
     /** Standard HTTP request/response. Default for all endpoints. */
-    case HTTP = 'http';
+    case Http = 'http';
 
     /** Server-Sent Events: long-lived GET connection, server pushes events. */
-    case SSE = 'sse';
+    case Sse = 'sse';
 
     /** Raw streaming response (chunked transfer, binary, etc.). */
     case Stream = 'stream';

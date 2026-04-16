@@ -55,7 +55,7 @@ class AsPayload
         public ?bool $public = null,
         /** @deprecated Use $transport instead. Kept for backward compatibility — has no effect. */
         public string $protocol = 'http',
-        public TransportType $transport = TransportType::HTTP,
+        public ?TransportType $transport = null,
         public ?string $responseWith = null,
         /** @var list<string>|null Request Content-Types this endpoint accepts. null = all. */
         public ?array $consumes = null,
