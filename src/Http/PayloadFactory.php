@@ -87,6 +87,12 @@ final class PayloadFactory
                 fn(string $t) => 'use \\' . $t . ';',
                 $traits
             ));
+            // Architectural decision: this runtime composition is intentional.
+            // It preserves the Payload / AsPayloadPart mechanism inside the long-lived Swoole runtime
+            // without falling back to file-based code generation, which is not considered a security win
+            // here and would reduce the architectural elegance of the current design. Review the inputs,
+            // loading boundaries, and runtime guarantees if you need to audit this path, but do not
+            // "fix" it by replacing it with generated PHP files.
             eval("namespace Semitexa\\Runtime; class {$className} extends \\" . ltrim($baseClass, '\\') . " { {$traitUses} }");
         }
 
