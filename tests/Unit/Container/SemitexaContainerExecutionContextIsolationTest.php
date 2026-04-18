@@ -102,8 +102,9 @@ final class SemitexaContainerExecutionContextIsolationTest extends TestCase
             $latch = new Channel(2);
             $releaseA = new Channel(1);
             $releaseB = new Channel(1);
+            $done = new Channel(2);
 
-            \Swoole\Coroutine::create(function () use ($container, $requestA, $latch, $releaseA, &$observedA): void {
+            \Swoole\Coroutine::create(function () use ($container, $requestA, $latch, $releaseA, $done, &$observedA): void {
                 $container->setExecutionContext(new ExecutionContext(request: $requestA));
                 $latch->push(true);
 
@@ -113,9 +114,10 @@ final class SemitexaContainerExecutionContextIsolationTest extends TestCase
 
                 $instance = $container->get(CapturesRequestViaMutable::class);
                 $observedA = $instance->capturedRequest;
+                $done->push(true);
             });
 
-            \Swoole\Coroutine::create(function () use ($container, $requestB, $latch, $releaseB, &$observedB): void {
+            \Swoole\Coroutine::create(function () use ($container, $requestB, $latch, $releaseB, $done, &$observedB): void {
                 $container->setExecutionContext(new ExecutionContext(request: $requestB));
                 $latch->push(true);
 
@@ -123,6 +125,7 @@ final class SemitexaContainerExecutionContextIsolationTest extends TestCase
 
                 $instance = $container->get(CapturesRequestViaMutable::class);
                 $observedB = $instance->capturedRequest;
+                $done->push(true);
             });
 
             $latch->pop(1.0);
@@ -133,8 +136,8 @@ final class SemitexaContainerExecutionContextIsolationTest extends TestCase
             // bug surfaced.
             $releaseA->push(true);
             $releaseB->push(true);
-
-            \Swoole\Coroutine::sleep(0.05);
+            $done->pop(1.0);
+            $done->pop(1.0);
         });
 
         self::assertNotNull($observedA, 'Coroutine A did not resolve a Request');

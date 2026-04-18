@@ -69,7 +69,7 @@ readonly class Request
 
     public function getHost(): string
     {
-        $hostHeader = trim($this->getHeader('X-Forwarded-Host') ?? $this->getHeader('Host') ?? '');
+        $hostHeader = trim($this->getHeader('Host') ?? '');
         if ($hostHeader === '') {
             return '';
         }
@@ -91,13 +91,14 @@ readonly class Request
     public function getScheme(): string
     {
         $schemeHeader = trim($this->getHeader('X-Forwarded-Proto') ?? '');
-        if ($schemeHeader !== '') {
+        if ($schemeHeader !== '' && $this->isTrustedForwardedRequest()) {
             $schemeParts = array_values(array_filter(array_map(
                 static fn (string $value): string => strtolower(trim($value)),
                 explode(',', $schemeHeader)
             )));
-            if (($schemeParts[0] ?? '') !== '') {
-                return $schemeParts[0];
+            $forwardedScheme = $schemeParts[0] ?? '';
+            if ($forwardedScheme === 'http' || $forwardedScheme === 'https') {
+                return $forwardedScheme;
             }
         }
 
@@ -117,6 +118,15 @@ readonly class Request
         }
 
         return $this->getScheme() . '://' . $host;
+    }
+
+    private function isTrustedForwardedRequest(): bool
+    {
+        $remoteAddr = strtolower(trim($this->getServer('remote_addr')));
+
+        return $remoteAddr === '127.0.0.1'
+            || $remoteAddr === '::1'
+            || $remoteAddr === 'localhost';
     }
     
     public function getQuery(string $key, string $default = ''): string

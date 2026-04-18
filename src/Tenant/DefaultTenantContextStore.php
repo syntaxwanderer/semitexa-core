@@ -18,8 +18,6 @@ final class DefaultTenantContextStore implements TenantContextStoreInterface
 {
     private const CONTEXT_KEY = 'semitexa.core.default_tenant_context_store';
 
-    private ?TenantContextInterface $fallback = null;
-
     public function get(): TenantContextInterface
     {
         return $this->tryGet() ?? DefaultTenantContext::getInstance();
@@ -27,34 +25,18 @@ final class DefaultTenantContextStore implements TenantContextStoreInterface
 
     public function tryGet(): ?TenantContextInterface
     {
-        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
-            $context = CoroutineLocal::get(self::CONTEXT_KEY);
+        $context = CoroutineLocal::get(self::CONTEXT_KEY);
 
-            return $context instanceof TenantContextInterface ? $context : null;
-        }
-
-        return $this->fallback;
+        return $context instanceof TenantContextInterface ? $context : null;
     }
 
     public function set(TenantContextInterface $context): void
     {
-        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
-            CoroutineLocal::set(self::CONTEXT_KEY, $context);
-
-            return;
-        }
-
-        $this->fallback = $context;
+        CoroutineLocal::set(self::CONTEXT_KEY, $context);
     }
 
     public function clear(): void
     {
-        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() >= 0) {
-            CoroutineLocal::remove(self::CONTEXT_KEY);
-
-            return;
-        }
-
-        $this->fallback = null;
+        CoroutineLocal::remove(self::CONTEXT_KEY);
     }
 }
