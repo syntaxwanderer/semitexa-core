@@ -222,12 +222,15 @@ final class LifecycleComponentRegistry
             return $bootstrapper;
         }
 
-        if (!is_callable([$bootstrapper, 'isEnabled']) || !is_callable([$bootstrapper, 'resolve'])) {
+        if (!is_callable([$bootstrapper, 'isEnabled'])) {
             return null;
         }
 
         $isEnabled = \Closure::fromCallable([$bootstrapper, 'isEnabled']);
-        $resolve = \Closure::fromCallable([$bootstrapper, 'resolve']);
+        $resolve = $this->legacyTenancyResolveClosure($bootstrapper);
+        if ($resolve === null) {
+            return null;
+        }
 
         return new class($isEnabled, $resolve) implements TenancyBootstrapperInterface
         {
@@ -252,6 +255,30 @@ final class LifecycleComponentRegistry
         };
     }
 
+    private function legacyTenancyResolveClosure(object $bootstrapper): ?\Closure
+    {
+        if (is_callable([$bootstrapper, 'resolve'])) {
+            return \Closure::fromCallable([$bootstrapper, 'resolve']);
+        }
+
+        if (!is_callable([$bootstrapper, 'getHandler'])) {
+            return null;
+        }
+
+        $getHandler = \Closure::fromCallable([$bootstrapper, 'getHandler']);
+
+        return static function (Request $request) use ($getHandler): ?HttpResponse {
+            $handler = $getHandler();
+            if (!is_object($handler) || !is_callable([$handler, 'handle'])) {
+                return null;
+            }
+
+            $response = $handler->handle($request);
+
+            return $response instanceof HttpResponse ? $response : null;
+        };
+    }
+
     private function adaptAuthBootstrapper(object $bootstrapper): ?AuthBootstrapperInterface
     {
         if ($bootstrapper instanceof AuthBootstrapperInterface) {
@@ -264,12 +291,14 @@ final class LifecycleComponentRegistry
 
         $isEnabled = \Closure::fromCallable([$bootstrapper, 'isEnabled']);
         $handle = \Closure::fromCallable([$bootstrapper, 'handle']);
+        $handleAcceptsMode = $this->callableAcceptsAtLeastArguments($handle, 2);
 
-        return new class($isEnabled, $handle) implements AuthBootstrapperInterface
+        return new class($isEnabled, $handle, $handleAcceptsMode) implements AuthBootstrapperInterface
         {
             public function __construct(
                 private readonly \Closure $isEnabled,
                 private readonly \Closure $handle,
+                private readonly bool $handleAcceptsMode,
             )
             {
             }
@@ -281,10 +310,19 @@ final class LifecycleComponentRegistry
 
             public function handle(object $payload, \Semitexa\Core\Auth\AuthenticationMode $mode = \Semitexa\Core\Auth\AuthenticationMode::Mandatory): ?\Semitexa\Core\Auth\AuthResult
             {
-                $result = ($this->handle)($payload, $mode);
+                $result = $this->handleAcceptsMode
+                    ? ($this->handle)($payload, $mode)
+                    : ($this->handle)($payload);
 
                 return $result instanceof \Semitexa\Core\Auth\AuthResult ? $result : null;
             }
         };
+    }
+
+    private function callableAcceptsAtLeastArguments(\Closure $callable, int $minimum): bool
+    {
+        $reflection = new \ReflectionFunction($callable);
+
+        return $reflection->isVariadic() || $reflection->getNumberOfParameters() >= $minimum;
     }
 }
