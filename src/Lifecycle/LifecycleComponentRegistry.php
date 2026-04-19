@@ -291,7 +291,7 @@ final class LifecycleComponentRegistry
 
         $isEnabled = \Closure::fromCallable([$bootstrapper, 'isEnabled']);
         $handle = \Closure::fromCallable([$bootstrapper, 'handle']);
-        $handleAcceptsMode = $this->callableAcceptsAtLeastArguments($handle, 2);
+        $handleAcceptsMode = $this->callableAcceptsAuthenticationMode($handle);
 
         return new class($isEnabled, $handle, $handleAcceptsMode) implements AuthBootstrapperInterface
         {
@@ -319,10 +319,58 @@ final class LifecycleComponentRegistry
         };
     }
 
-    private function callableAcceptsAtLeastArguments(\Closure $callable, int $minimum): bool
+    private function callableAcceptsAuthenticationMode(\Closure $callable): bool
     {
         $reflection = new \ReflectionFunction($callable);
+        $parameters = $reflection->getParameters();
+        $secondParameter = $parameters[1] ?? null;
 
-        return $reflection->isVariadic() || $reflection->getNumberOfParameters() >= $minimum;
+        if ($secondParameter === null) {
+            return false;
+        }
+
+        if ($secondParameter->isVariadic()) {
+            return true;
+        }
+
+        $type = $secondParameter->getType();
+        if ($type === null) {
+            return true;
+        }
+
+        return $this->typeAcceptsAuthenticationMode($type);
+    }
+
+    private function typeAcceptsAuthenticationMode(\ReflectionType $type): bool
+    {
+        if ($type instanceof \ReflectionNamedType) {
+            $name = $type->getName();
+
+            return $name === 'mixed'
+                || $name === 'object'
+                || (!$type->isBuiltin() && is_a(\Semitexa\Core\Auth\AuthenticationMode::class, $name, true));
+        }
+
+        if ($type instanceof \ReflectionUnionType) {
+            foreach ($type->getTypes() as $innerType) {
+                if ($this->typeAcceptsAuthenticationMode($innerType)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if ($type instanceof \ReflectionIntersectionType) {
+            foreach ($type->getTypes() as $innerType) {
+                if (!$this->typeAcceptsAuthenticationMode($innerType)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
     }
 }

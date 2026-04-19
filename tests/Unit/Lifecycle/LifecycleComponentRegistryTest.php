@@ -7,6 +7,7 @@ namespace Semitexa\Core\Tests\Unit\Lifecycle;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Semitexa\Core\Auth\AuthBootstrapperInterface;
+use Semitexa\Core\Auth\AuthenticationMode;
 use Semitexa\Core\Auth\AuthResult;
 use Semitexa\Core\Lifecycle\LifecycleComponentRegistry;
 use Semitexa\Core\ModuleRegistry;
@@ -79,6 +80,36 @@ final class LifecycleComponentRegistryTest extends TestCase
         self::assertNotNull($adapter);
         $payload = new \stdClass();
         $result = $adapter->handle($payload);
+
+        self::assertNotNull($result);
+        self::assertFalse($result->success);
+        self::assertSame('legacy', $result->reason);
+    }
+
+    #[Test]
+    public function auth_adapter_skips_mode_when_second_parameter_type_is_incompatible(): void
+    {
+        $registry = $this->makeRegistry();
+        /** @var AuthBootstrapperInterface|null $adapter */
+        $adapter = $this->invokePrivate(
+            $registry,
+            'adaptAuthBootstrapper',
+            new class {
+                public function isEnabled(): bool
+                {
+                    return true;
+                }
+
+                public function handle(object $payload, string $mode = 'legacy'): AuthResult
+                {
+                    return AuthResult::failed($mode);
+                }
+            },
+        );
+
+        self::assertNotNull($adapter);
+
+        $result = $adapter->handle(new \stdClass(), AuthenticationMode::BestEffort);
 
         self::assertNotNull($result);
         self::assertFalse($result->success);

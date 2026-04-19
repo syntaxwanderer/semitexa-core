@@ -148,7 +148,7 @@ final class AsyncJsonLogger implements LoggerInterface
         }
         $line = '';
         foreach ($entries as $entry) {
-            $line .= json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
+            $line .= $this->encodeEntry($entry) . "\n";
         }
         error_clear_last();
         if (@file_put_contents($path, $line, FILE_APPEND | LOCK_EX) === false) {
@@ -169,5 +169,29 @@ final class AsyncJsonLogger implements LoggerInterface
     private function resolveProjectRoot(): string
     {
         return \Semitexa\Core\Support\ProjectRoot::get();
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function encodeEntry(array $entry): string
+    {
+        try {
+            return json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            $fallbackEntry = [
+                'timestamp' => date('c'),
+                'level' => 'error',
+                'message' => 'Log entry could not be JSON encoded',
+                'context' => [
+                    'original_level' => is_string($entry['level'] ?? null) ? $entry['level'] : null,
+                    'original_message' => is_string($entry['message'] ?? null) ? $entry['message'] : null,
+                    'encoding_error' => $exception->getMessage(),
+                ],
+            ];
+
+            return json_encode($fallbackEntry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+                ?: '{"timestamp":null,"level":"error","message":"Log entry could not be JSON encoded","context":{"encoding_error":"fallback encoding failed"}}';
+        }
     }
 }

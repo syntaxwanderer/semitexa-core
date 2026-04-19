@@ -8,8 +8,8 @@ namespace Semitexa\Core;
  * HTTP Request representation
  *
  * @phpstan-type Headers array<string, string>
- * @phpstan-type QueryArray array<string, string|array<mixed>>
- * @phpstan-type PostArray array<string, string|array<mixed>>
+ * @phpstan-type QueryArray array<array-key, string|array<mixed>>
+ * @phpstan-type PostArray array<array-key, string|array<mixed>>
  * @phpstan-type ServerArray array<string, mixed>
  * @phpstan-type CookieArray array<string, string>
  */
