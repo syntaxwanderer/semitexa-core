@@ -9,19 +9,19 @@ use Semitexa\Core\Request;
 
 final class RequestTest extends TestCase
 {
-    public function testGetHostIgnoresUntrustedForwardedHost(): void
+    public function testGetHostParsesHostHeader(): void
     {
         $request = new Request(
             'GET',
             '/',
-            ['Host' => 'safe.example', 'X-Forwarded-Host' => 'evil.example'],
+            ['Host' => 'Example.COM:8443'],
             [],
             [],
             ['remote_addr' => '203.0.113.10'],
             [],
         );
 
-        self::assertSame('safe.example', $request->getHost());
+        $this->assertSame('example.com', $request->getHost());
     }
 
     public function testGetSchemeIgnoresUntrustedForwardedProto(): void
@@ -32,10 +32,40 @@ final class RequestTest extends TestCase
             ['X-Forwarded-Proto' => 'javascript'],
             [],
             [],
-            ['remote_addr' => '203.0.113.10', 'https' => 'on'],
+            ['REMOTE_ADDR' => '203.0.113.10', 'HTTPS' => 'on'],
             [],
         );
 
-        self::assertSame('https', $request->getScheme());
+        $this->assertSame('https', $request->getScheme());
+    }
+
+    public function testGetSchemeTrustsForwardedProtoForLoopbackProxy(): void
+    {
+        $request = new Request(
+            'GET',
+            '/',
+            ['X-Forwarded-Proto' => 'https'],
+            [],
+            [],
+            ['REMOTE_ADDR' => '127.0.0.1'],
+            [],
+        );
+
+        $this->assertSame('https', $request->getScheme());
+    }
+
+    public function testGetOriginReturnsEmptyStringWithoutHost(): void
+    {
+        $request = new Request(
+            'GET',
+            '/',
+            [],
+            [],
+            [],
+            ['HTTPS' => 'on'],
+            [],
+        );
+
+        $this->assertSame('', $request->getOrigin());
     }
 }

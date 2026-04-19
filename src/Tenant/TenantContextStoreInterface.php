@@ -13,8 +13,8 @@ namespace Semitexa\Core\Tenant;
  * same instance regardless of runtime.
  *
  * Reads through {@see get()} return the guest/default context when no tenant
- * has been resolved; callers that truly need a concrete tenant should use
- * {@see getOrFail()}.
+ * has been resolved; callers that truly need a concrete tenant should check
+ * {@see tryGet()} and handle null explicitly.
  */
 interface TenantContextStoreInterface
 {

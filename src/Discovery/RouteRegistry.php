@@ -188,9 +188,9 @@ class RouteRegistry
         $this->namedIndex = [];
     }
 
-    public function setTenantContextProvider(callable $provider): void
+    public function setTenantContextProvider(\Closure $provider): void
     {
-        $this->tenantContextProvider = \Closure::fromCallable($provider);
+        $this->tenantContextProvider = $provider;
     }
 
     /**

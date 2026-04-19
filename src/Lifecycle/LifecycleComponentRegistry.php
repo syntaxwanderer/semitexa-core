@@ -7,12 +7,17 @@ namespace Semitexa\Core\Lifecycle;
 use Psr\Container\ContainerInterface;
 use Semitexa\Core\Auth\AuthBootstrapperFactoryInterface;
 use Semitexa\Core\Auth\AuthBootstrapperInterface;
+use Semitexa\Core\Auth\AuthContextInterface;
 use Semitexa\Core\Container\RequestScopedContainer;
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Core\Event\EventDispatcherInterface;
+use Semitexa\Core\Log\LoggerInterface;
 use Semitexa\Core\ModuleRegistry;
+use Semitexa\Core\Tenant\TenantContextStoreInterface;
 use Semitexa\Core\Tenant\TenancyBootstrapperFactoryInterface;
 use Semitexa\Core\Tenant\TenancyBootstrapperInterface;
+use Semitexa\Core\Request;
+use Semitexa\Core\HttpResponse;
 use Semitexa\Locale\Context\LocaleManager;
 use Semitexa\Locale\LocaleBootstrapper;
 
@@ -74,10 +79,17 @@ final class LifecycleComponentRegistry
                 return null;
             }
 
-            $tenantContextStore = $container->get(\Semitexa\Core\Tenant\TenantContextStoreInterface::class);
-            $bootstrapper = new $bootstrapperClass($tenantContextStore, $classDiscovery, $events);
+            $namedArgs = [
+                'classDiscovery' => $classDiscovery,
+                'events' => $events,
+            ];
+            if ($container->has(TenantContextStoreInterface::class)) {
+                $namedArgs['tenantContextStore'] = $container->get(TenantContextStoreInterface::class);
+            }
 
-            return $bootstrapper instanceof TenancyBootstrapperInterface ? $bootstrapper : null;
+            $bootstrapper = $this->instantiateLifecycleComponent($bootstrapperClass, $namedArgs);
+
+            return $bootstrapper !== null ? $this->adaptTenancyBootstrapper($bootstrapper) : null;
         }
 
         /** @var TenancyBootstrapperFactoryInterface $factory */
@@ -108,22 +120,22 @@ final class LifecycleComponentRegistry
             $classDiscovery = $container->has(ClassDiscovery::class)
                 ? $container->get(ClassDiscovery::class)
                 : null;
-            $authContext = $container->has(\Semitexa\Core\Auth\AuthContextInterface::class)
-                ? $container->get(\Semitexa\Core\Auth\AuthContextInterface::class)
+            $authContext = $container->has(AuthContextInterface::class)
+                ? $container->get(AuthContextInterface::class)
                 : null;
-            $logger = $container->has(\Semitexa\Core\Log\LoggerInterface::class)
+            $logger = $container->has(LoggerInterface::class)
                 ? $container->get(\Semitexa\Core\Log\LoggerInterface::class)
                 : null;
 
-            $bootstrapper = new $bootstrapperClass(
-                container: $container,
-                requestScopedContainer: $requestScopedContainer,
-                classDiscovery: $classDiscovery,
-                authContext: $authContext,
-                logger: $logger,
-            );
+            $bootstrapper = $this->instantiateLifecycleComponent($bootstrapperClass, [
+                'container' => $container,
+                'requestScopedContainer' => $requestScopedContainer,
+                'classDiscovery' => $classDiscovery,
+                'authContext' => $authContext,
+                'logger' => $logger,
+            ]);
 
-            return $bootstrapper instanceof AuthBootstrapperInterface ? $bootstrapper : null;
+            return $bootstrapper !== null ? $this->adaptAuthBootstrapper($bootstrapper) : null;
         }
 
         /** @var AuthBootstrapperFactoryInterface $factory */
@@ -146,5 +158,119 @@ final class LifecycleComponentRegistry
             new LocaleManager(),
             events: $events,
         );
+    }
+
+    /**
+     * Instantiate a lifecycle component by matching known named dependencies to
+     * the target constructor's declared parameter names.
+     *
+     * This keeps Core compatible with pre-factory bootstrapper builds whose
+     * constructor signatures differ from the current package versions.
+     *
+     * @param class-string $className
+     * @param array<string, mixed> $namedArgs
+     */
+    private function instantiateLifecycleComponent(string $className, array $namedArgs): ?object
+    {
+        $reflection = new \ReflectionClass($className);
+        $constructor = $reflection->getConstructor();
+        if ($constructor === null) {
+            return $reflection->newInstance();
+        }
+
+        $args = [];
+        foreach ($constructor->getParameters() as $parameter) {
+            $name = $parameter->getName();
+            if (array_key_exists($name, $namedArgs)) {
+                $args[] = $namedArgs[$name];
+                continue;
+            }
+
+            if ($parameter->isDefaultValueAvailable()) {
+                $args[] = $parameter->getDefaultValue();
+                continue;
+            }
+
+            if ($parameter->allowsNull()) {
+                $args[] = null;
+                continue;
+            }
+
+            return null;
+        }
+
+        return $reflection->newInstanceArgs($args);
+    }
+
+    private function adaptTenancyBootstrapper(object $bootstrapper): ?TenancyBootstrapperInterface
+    {
+        if ($bootstrapper instanceof TenancyBootstrapperInterface) {
+            return $bootstrapper;
+        }
+
+        if (!method_exists($bootstrapper, 'isEnabled') || !method_exists($bootstrapper, 'resolve')) {
+            return null;
+        }
+
+        $isEnabled = \Closure::fromCallable([$bootstrapper, 'isEnabled']);
+        $resolve = \Closure::fromCallable([$bootstrapper, 'resolve']);
+
+        return new class($isEnabled, $resolve) implements TenancyBootstrapperInterface
+        {
+            public function __construct(
+                private readonly \Closure $isEnabled,
+                private readonly \Closure $resolve,
+            )
+            {
+            }
+
+            public function isEnabled(): bool
+            {
+                return (bool) ($this->isEnabled)();
+            }
+
+            public function resolve(Request $request): ?HttpResponse
+            {
+                $response = ($this->resolve)($request);
+
+                return $response instanceof HttpResponse ? $response : null;
+            }
+        };
+    }
+
+    private function adaptAuthBootstrapper(object $bootstrapper): ?AuthBootstrapperInterface
+    {
+        if ($bootstrapper instanceof AuthBootstrapperInterface) {
+            return $bootstrapper;
+        }
+
+        if (!method_exists($bootstrapper, 'isEnabled') || !method_exists($bootstrapper, 'handle')) {
+            return null;
+        }
+
+        $isEnabled = \Closure::fromCallable([$bootstrapper, 'isEnabled']);
+        $handle = \Closure::fromCallable([$bootstrapper, 'handle']);
+
+        return new class($isEnabled, $handle) implements AuthBootstrapperInterface
+        {
+            public function __construct(
+                private readonly \Closure $isEnabled,
+                private readonly \Closure $handle,
+            )
+            {
+            }
+
+            public function isEnabled(): bool
+            {
+                return (bool) ($this->isEnabled)();
+            }
+
+            public function handle(object $payload, \Semitexa\Core\Auth\AuthenticationMode $mode = \Semitexa\Core\Auth\AuthenticationMode::Mandatory): ?\Semitexa\Core\Auth\AuthResult
+            {
+                $result = ($this->handle)($payload, $mode);
+
+                return $result instanceof \Semitexa\Core\Auth\AuthResult ? $result : null;
+            }
+        };
     }
 }

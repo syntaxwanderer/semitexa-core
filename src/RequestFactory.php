@@ -58,7 +58,7 @@ class RequestFactory
             $cookies = array_merge($parsed, $cookies);
         }
 
-        $server = $swooleRequest->server ?? [];
+        $server = self::normalizeServerArray($swooleRequest->server ?? []);
         $uri = $server['request_uri'] ?? $server['REQUEST_URI'] ?? $server['path_info'] ?? '/';
         if ($uri === '' || $uri === false) {
             $uri = '/';
@@ -70,7 +70,7 @@ class RequestFactory
             headers: $swooleRequest->header ?? [],
             query: $swooleRequest->get ?? [],
             post: $post,
-            server: array_merge($swooleRequest->server ?? [], ['SWOOLE_SERVER' => '1']),
+            server: array_merge($server, ['swoole_server' => '1']),
             cookies: $cookies,
             content: $content
         );
@@ -87,7 +87,7 @@ class RequestFactory
             headers: $data['headers'] ?? [],
             query: $data['query'] ?? [],
             post: $data['post'] ?? [],
-            server: $data['server'] ?? [],
+            server: self::normalizeServerArray($data['server'] ?? []),
             cookies: $data['cookies'] ?? [],
             content: $data['content'] ?? null
         );
@@ -112,6 +112,24 @@ class RequestFactory
             }
         }
         return null;
+    }
+
+    /**
+     * @param mixed $server
+     * @return array<string, mixed>
+     */
+    private static function normalizeServerArray(mixed $server): array
+    {
+        if (!is_array($server)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($server as $key => $value) {
+            $normalized[strtolower((string) $key)] = $value;
+        }
+
+        return $normalized;
     }
 
     /**

@@ -141,7 +141,36 @@ readonly class Request
     
     public function getServer(string $key, string $default = ''): string
     {
-        return $this->server[$key] ?? $default;
+        $normalizedKey = strtolower($key);
+
+        if (isset($this->server[$normalizedKey])) {
+            return $this->normalizeServerValue($this->server[$normalizedKey], $default);
+        }
+
+        if (isset($this->server[$key])) {
+            return $this->normalizeServerValue($this->server[$key], $default);
+        }
+
+        foreach ($this->server as $serverKey => $value) {
+            if (strtolower((string) $serverKey) === $normalizedKey) {
+                return $this->normalizeServerValue($value, $default);
+            }
+        }
+
+        return $default;
+    }
+
+    private function normalizeServerValue(mixed $value, string $default): string
+    {
+        if (is_scalar($value)) {
+            return (string) $value;
+        }
+
+        if ($value instanceof \Stringable) {
+            return (string) $value;
+        }
+
+        return $default;
     }
     
     public function getCookie(string $key, string $default = ''): string
