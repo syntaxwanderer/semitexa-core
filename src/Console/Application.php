@@ -69,17 +69,12 @@ class Application extends SymfonyApplication
     /**
      * Instantiate a #[AsCommand] class and hand it to the container for
      * property injection. Commands declare their dependencies exactly like
-     * services — via #[InjectAsReadonly] on protected properties — so the
-     * construction path is trivial:
+     * services — via #[InjectAsReadonly] on protected properties — while some
+     * legacy commands still use constructor DI:
      *
-     *   1. Constructor must have zero required parameters. Commands are not
-     *      container-managed framework objects (they live on Symfony's
-     *      Application), so we cannot do constructor DI on them the way the
-     *      container does for #[AsService]. Required constructor params are
-     *      therefore a signal that a command is still using the pre-attribute
-     *      DI style and is skipped with a diagnostic.
-     *   2. Plain `new $className()`.
-     *   3. Container applies #[InjectAsReadonly] property injection.
+     *   1. Legacy constructor DI commands are created via SemitexaContainer::resolve().
+     *   2. Attribute-only commands use plain `new $className()`.
+     *   3. Container applies #[InjectAsReadonly] property injection in both paths.
      *
      * @param class-string<Command> $className
      * @return Command|null null if dependencies are not available
@@ -88,19 +83,28 @@ class Application extends SymfonyApplication
     {
         $ref = new ReflectionClass($className);
         $ctor = $ref->getConstructor();
-        if ($ctor !== null && $ctor->getNumberOfRequiredParameters() > 0) {
-            $resolved = $container->get($className);
-
-            return $resolved instanceof Command ? $resolved : null;
-        }
 
         try {
+            if ($ctor !== null && $ctor->getNumberOfRequiredParameters() > 0) {
+                $resolved = $container->resolve($className);
+
+                if (!$resolved instanceof Command) {
+                    return null;
+                }
+
+                $container->injectInto($resolved);
+
+                return $resolved;
+            }
+
             /** @var Command $command */
             $command = new $className();
             $container->injectInto($command);
+
             return $command;
         } catch (InjectionException $e) {
             BootDiagnostics::current()->skip('Console', "Skip {$className}: " . $e->getMessage(), $e);
+
             return null;
         }
     }

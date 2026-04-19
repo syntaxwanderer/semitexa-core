@@ -165,7 +165,8 @@ final class SessionPhase
             $this->tenantContextStore->clear();
         }
 
-        $this->requestScopedContainer->set(TenantContextInterface::class, $this->tenantContextStore->get());
+        $tenantContext = $this->resolveTenantContext();
+        $this->requestScopedContainer->set(TenantContextInterface::class, $tenantContext);
 
         // AuthContextInterface is supplied by semitexa-auth through a SatisfiesServiceContract
         // binding. When the auth package is not installed, fall back to the Core-owned guest
@@ -178,6 +179,30 @@ final class SessionPhase
 
         $localeContext = DefaultLocaleContext::getInstance();
         $this->requestScopedContainer->set(LocaleContextInterface::class, $localeContext);
+    }
+
+    private function resolveTenantContext(): TenantContextInterface
+    {
+        $tenantContext = $this->tenantContextStore->tryGet();
+        if ($tenantContext instanceof TenantContextInterface) {
+            return $tenantContext;
+        }
+
+        if ($this->tenancy !== null && $this->tenancy->isEnabled()) {
+            $legacyStoreClass = 'Semitexa\\Tenancy\\Context\\CoroutineContextStore';
+            try {
+                $legacyTenantContext = $legacyStoreClass::get();
+                if ($legacyTenantContext instanceof TenantContextInterface) {
+                    $this->tenantContextStore->set($legacyTenantContext);
+
+                    return $legacyTenantContext;
+                }
+            } catch (\Throwable) {
+                // Mixed-version fallback: ignore missing legacy store and keep the new store value.
+            }
+        }
+
+        return $this->tenantContextStore->get();
     }
 
     private function resolveLegacyAuthContext(): AuthContextInterface
