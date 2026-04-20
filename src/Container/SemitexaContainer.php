@@ -411,9 +411,15 @@ final class SemitexaContainer implements ContainerInterface
                 ?? $this->instanceStore->prototypes[$typeName]
                 ?? null;
             if ($proto !== null) {
+                $nestedClass = isset($this->instanceStore->prototypes[$protoClass]) ? $protoClass : $typeName;
+                $nestedClone = clone $proto;
+                // A nested execution-scoped dependency also declares #[InjectAsMutable]
+                // properties; skipping this recursion would leave its typed properties
+                // uninitialized and trigger "must not be accessed before initialization".
+                $this->injectMutableProperties($nestedClone, $nestedClass);
                 $prop = $ref->getProperty($propName);
                 $prop->setAccessible(true);
-                $prop->setValue($instance, clone $proto);
+                $prop->setValue($instance, $nestedClone);
                 continue;
             }
 
