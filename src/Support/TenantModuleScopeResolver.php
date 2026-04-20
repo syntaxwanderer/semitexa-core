@@ -182,15 +182,13 @@ final class TenantModuleScopeResolver
     private static function resolveTenantId(TenantContextInterface $context): string
     {
         if (method_exists($context, 'getTenantId')) {
-            $tenantId = $context->getTenantId();
-            if (is_string($tenantId) && $tenantId !== '') {
-                return $tenantId;
-            }
+            $tenantId = trim((string) $context->getTenantId());
 
-            return 'default';
+            return $tenantId !== '' ? $tenantId : 'default';
         }
 
         $organization = $context->getLayer(new OrganizationLayer());
+
         if ($organization === null) {
             return 'default';
         }

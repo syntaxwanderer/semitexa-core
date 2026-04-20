@@ -280,7 +280,18 @@ final class GraphBuilder
 
     /**
      * Create instance of a container-managed framework object.
-     * Uses newInstanceWithoutConstructor(). Constructors with parameters are forbidden.
+     *
+     * The container instantiates via newInstanceWithoutConstructor() by design:
+     * dependencies flow through property attributes (#[InjectAsReadonly],
+     * #[InjectAsMutable], #[InjectAsFactory], #[Config]), not through constructor
+     * arguments. Declaring __construct with parameters on a container-managed
+     * class is therefore treated as an attempt to use the constructor as a DI
+     * channel and rejected.
+     *
+     * This does not ban constructors. A parameterless __construct on a
+     * container-managed class is inert (the container never calls it) but
+     * tolerated. Constructors are unrestricted on value objects, DTOs,
+     * payloads, resources, and any class not managed by this container.
      *
      * @param class-string $class
      * @param InjectionsMap $injections
@@ -305,8 +316,12 @@ final class GraphBuilder
                 propertyName: '__construct',
                 propertyType: 'constructor',
                 injectionKind: 'constructor',
-                message: "Container-managed framework object {$class} must not have constructor parameters. "
-                    . "Use #[InjectAsReadonly], #[InjectAsMutable], #[InjectAsFactory], or #[Config] properties instead.",
+                message: "Constructor injection is not the DI channel for container-managed {$class}. "
+                    . "Declare dependencies as protected properties with #[InjectAsReadonly], "
+                    . "#[InjectAsMutable], #[InjectAsFactory], or #[Config] instead of constructor "
+                    . "parameters. Constructors are not banned — a parameterless __construct is "
+                    . "still allowed here, and constructors are unrestricted on non-container-managed "
+                    . "types (DTOs, payloads, resources, value objects).",
             );
         }
 

@@ -32,7 +32,14 @@ use ReflectionNamedType;
  * - #[InjectAsFactory] — multi-implementation factory
  * - #[Config] — scalar configuration value
  *
- * Constructors with parameters are forbidden on container-managed framework objects.
+ * Container-managed framework objects receive their dependencies exclusively
+ * through these property attributes — constructor-based injection is not the DI
+ * channel here, so declaring __construct with parameters on such a class is
+ * rejected. This is not a ban on constructors: a parameterless __construct is
+ * left untouched (the container instantiates via newInstanceWithoutConstructor()),
+ * and constructors are fully available on value objects, DTOs, payloads,
+ * resources, and any type that is not container-managed.
+ *
  * Container is sealed after boot — set() throws ContainerSealedException.
  *
  * Internal state is organized into three typed stores:
