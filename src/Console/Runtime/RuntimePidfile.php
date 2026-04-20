@@ -32,10 +32,7 @@ final class RuntimePidfile
             return;
         }
 
-        $resolved = @realpath($serverScriptPath);
-        if (is_string($resolved)) {
-            $serverScriptPath = $resolved;
-        }
+        $serverScriptPath = self::normalizeScriptPath($serverScriptPath, $projectRoot);
 
         $payload = sprintf("%d\n%s\n", $pid, $serverScriptPath);
         @file_put_contents($projectRoot . self::COOKIE_RELATIVE_PATH, $payload, LOCK_EX);
@@ -94,16 +91,21 @@ final class RuntimePidfile
 
         $cookie = self::readCookie($projectRoot);
         if ($cookie !== null && $cookie['script'] !== '') {
+            $cookieScript = self::normalizeScriptPath($cookie['script'], $projectRoot);
             foreach ($fields as $field) {
-                if ($field === $cookie['script']) {
+                $normalizedField = self::normalizeScriptPath($field, $projectRoot);
+                if (
+                    $field === $cookie['script']
+                    || ($normalizedField !== '' && $normalizedField === $cookieScript)
+                ) {
                     return true;
                 }
             }
-            return false;
         }
 
         foreach ($fields as $field) {
-            if ($field !== '' && basename($field) === 'server.php') {
+            $normalizedField = self::normalizeScriptPath($field, $projectRoot);
+            if ($field !== '' && basename($normalizedField !== '' ? $normalizedField : $field) === 'server.php') {
                 return true;
             }
         }
@@ -125,5 +127,30 @@ final class RuntimePidfile
         }
         $raw = rtrim($raw, "\0");
         return explode("\0", $raw);
+    }
+
+    private static function normalizeScriptPath(string $scriptPath, string $projectRoot): string
+    {
+        $scriptPath = trim($scriptPath);
+        if ($scriptPath === '') {
+            return '';
+        }
+
+        $resolved = @realpath($scriptPath);
+        if (is_string($resolved)) {
+            return $resolved;
+        }
+
+        if (!str_starts_with($scriptPath, '/')) {
+            $candidate = $projectRoot . '/' . ltrim($scriptPath, './');
+            $resolved = @realpath($candidate);
+            if (is_string($resolved)) {
+                return $resolved;
+            }
+
+            return $candidate;
+        }
+
+        return $scriptPath;
     }
 }
