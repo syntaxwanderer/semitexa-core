@@ -1,6 +1,6 @@
 # Semitexa DI Container
 
-Semitexa uses a **custom DI container** (no PHP-DI). It is built once per worker and follows the design in `var/docs/DESIGN_DI_CONTAINER.md`: only one way to register services and one way to inject.
+Semitexa uses a **custom DI container** (no PHP-DI). It is built once per worker. There is one way to register services (contract attributes) and one way to inject (property attributes). The canonical DI policy is **packages/semitexa-docs/docs/workspace/DI_ONE_WAY.md**; container mechanics (what gets registered, how resolution works, request scoping) are documented here.
 
 ## Who gets into the container
 
@@ -11,9 +11,9 @@ Semitexa uses a **custom DI container** (no PHP-DI). It is built once per worker
 
 Bootstrap entries (e.g. `Environment`) are registered in `ContainerFactory::registerBootstrapEntries()` with `$container->set()` before `build()`.
 
-## How to inject (no constructor injection)
+## How to inject (property injection is the One Way)
 
-Dependencies are injected **only via protected properties** with exactly one of these attributes:
+Dependencies flow into container-managed classes **only via protected properties**, each annotated with exactly one of these attributes:
 
 | Attribute            | Meaning |
 |----------------------|--------|
@@ -22,7 +22,18 @@ Dependencies are injected **only via protected properties** with exactly one of 
 | **#[InjectAsFactory]**  | Factory for a contract: `getDefault()`, `get(string $key)`, `keys()`. Property type must be a Factory* interface. |
 
 - **What** is injected is determined by the **property type** (the type hint).
-- Only **protected** properties are considered. Constructor parameters are not used for DI (except for generated resolvers that receive implementations).
+- Only **protected** properties are considered.
+- The container instantiates container-managed classes via `newInstanceWithoutConstructor()`, so the constructor is never used as a DI channel. Declaring `__construct` with parameters on a container-managed class is rejected by both `InjectionViaConstructorRule` (PHPStan) and the runtime container.
+
+### “No constructor injection” ≠ “no constructors”
+
+This rule bans one specific use of the constructor — as a DI entry point on container-managed classes — and nothing else.
+
+- **Allowed on container-managed classes:** a parameterless `__construct` used for local initialization, default setup, or invariant wiring. The container does not call it, but declaring it is fine.
+- **Allowed on non-container-managed classes:** constructors with parameters on DTOs, payloads, resources, value objects, events, context objects, domain model entities — the DI rule does not apply to these.
+- **Not allowed:** `__construct($dep1, $dep2)` on a class marked with `#[AsService]`, `#[AsPayloadHandler]`, `#[AsEventListener]`, `#[AsPipelineListener]`, `#[SatisfiesServiceContract]`, `#[SatisfiesRepositoryContract]`, or `#[AsRepository]`. Move those dependencies onto protected properties with the injection attribute that matches the scope.
+
+Generated resolvers are the one internal exception: the container instantiates them with their implementation list, not via property injection. Application code should not reproduce this pattern.
 
 Example (handler; no AsServiceContract):
 
@@ -76,7 +87,7 @@ $handler = $requestScoped->get(MyHandler::class);   // mutable: clone + RequestC
 - **Resolver (optional):** If `App\Registry\Contracts\{InterfaceShortName}Resolver` exists, the container uses it to get the active implementation; otherwise it uses the active implementation from the registry (module order).
 - **Factory*:** For contracts with a Factory* interface (e.g. `FactoryItemListProviderInterface`), the container binds it either to a generated factory class (when present) or to a generic `ContractFactory` implementation. Inject the Factory* interface to use `getDefault()`, `get($key)`, `keys()`.
 
-See **docs/SERVICE_CONTRACTS.md** for contracts, `contracts:list`, and resolver/factory conventions.
+See **packages/semitexa-core/docs/SERVICE_CONTRACTS.md** for contracts, `contracts:list`, and resolver/factory conventions.
 
 ## Swoole
 

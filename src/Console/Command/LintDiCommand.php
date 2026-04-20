@@ -22,8 +22,12 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Verify DI rules: no constructor params, no static container access, protected visibility,
- * #[Config] on scalars only, #[InjectAs*] on class types only.
+ * Verify DI rules on container-managed classes:
+ * - no constructor-based injection (no __construct parameters — constructors
+ *   themselves are allowed, just not as a DI channel);
+ * - no static container access;
+ * - injected properties are protected;
+ * - #[Config] on scalars only, #[InjectAs*] on class types only.
  */
 #[AsCommand(name: 'semitexa:lint:di', description: 'Verify DI injection rules on all container-managed classes')]
 final class LintDiCommand extends BaseCommand
@@ -73,10 +77,13 @@ final class LintDiCommand extends BaseCommand
                 continue;
             }
 
-            // Check: no constructor parameters
+            // Check: no constructor-based injection on container-managed classes.
+            // A parameterless __construct is fine (the container ignores it); a
+            // __construct with parameters is the unambiguous signal that the
+            // constructor is being used as a DI channel, which One Way forbids.
             $ctor = $ref->getConstructor();
             if ($ctor !== null && $ctor->getNumberOfParameters() > 0) {
-                $errors[] = "{$class}: Constructor has parameters. Container-managed objects must not have constructor parameters.";
+                $errors[] = "{$class}: __construct has parameters. Container-managed classes receive dependencies through #[InjectAsReadonly] / #[InjectAsMutable] / #[InjectAsFactory] / #[Config] properties, not constructor arguments. A parameterless __construct for local initialization is still allowed.";
             }
 
             // Check all properties
