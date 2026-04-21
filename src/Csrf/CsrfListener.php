@@ -8,6 +8,7 @@ use Semitexa\Core\Attribute\AsPipelineListener;
 use Semitexa\Core\Attribute\InjectAsMutable;
 use Semitexa\Core\Auth\AuthContextInterface;
 use Semitexa\Core\Csrf\Attribute\CsrfExempt;
+use Semitexa\Core\Environment;
 use Semitexa\Core\Pipeline\AuthCheck;
 use Semitexa\Core\Pipeline\Exception\AccessDeniedException;
 use Semitexa\Core\Pipeline\PipelineListenerInterface;
@@ -27,8 +28,10 @@ use Semitexa\Core\Session\SessionInterface;
  * The token lives on the session as CsrfToken. The matching value is sent over
  * the wire either as:
  *   - the X-CSRF-Token request header, or
- *   - the _csrf form field (falling back to POST body), or
- *   - the XSRF-TOKEN cookie read back via JS.
+ *   - the _csrf form field (falling back to POST body).
+ *
+ * The XSRF-TOKEN cookie is transport-only for browser JS and must be echoed
+ * back via one of the channels above; it is not accepted as proof on its own.
  *
  * Closes finding S-5 in the audit: before this listener, no CSRF protection
  * existed — SameSite=Lax was the only cross-site mitigation.
@@ -40,8 +43,6 @@ final class CsrfListener implements PipelineListenerInterface
 
     private const HEADER_NAME = 'X-CSRF-Token';
     private const FORM_FIELD = '_csrf';
-    private const COOKIE_NAME = 'XSRF-TOKEN';
-
     #[InjectAsMutable]
     protected ?SessionInterface $session = null;
 
@@ -55,8 +56,12 @@ final class CsrfListener implements PipelineListenerInterface
             return;
         }
 
-        // CSRF is a session-cookie attack; only apply when the session backs the auth.
+        // CSRF is a session-cookie attack; only apply when the authenticated request
+        // actually presents the session cookie used by the browser flow.
         if ($this->authContext === null || $this->authContext->isGuest()) {
+            return;
+        }
+        if (!$this->hasSessionCookie($context)) {
             return;
         }
 
@@ -97,11 +102,13 @@ final class CsrfListener implements PipelineListenerInterface
             return trim($post);
         }
 
-        $cookie = $request->cookies[self::COOKIE_NAME] ?? null;
-        if (is_string($cookie) && $cookie !== '') {
-            return trim($cookie);
-        }
-
         return '';
+    }
+
+    private function hasSessionCookie(RequestPipelineContext $context): bool
+    {
+        $cookieName = Environment::getEnvValue('SESSION_COOKIE_NAME') ?? 'semitexa_session';
+
+        return trim($context->request->getCookie($cookieName, '')) !== '';
     }
 }
