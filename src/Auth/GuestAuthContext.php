@@ -7,6 +7,7 @@ namespace Semitexa\Core\Auth;
 final class GuestAuthContext implements AuthContextInterface
 {
     private static ?self $instance = null;
+    private ?AuthResult $lastResult = null;
 
     private function __construct()
     {
@@ -33,15 +34,17 @@ final class GuestAuthContext implements AuthContextInterface
 
     public function resetToGuest(): void
     {
+        $this->lastResult = null;
     }
 
     public function setAuthResult(AuthResult $result): void
     {
+        $this->lastResult = $result;
     }
 
     public function getLastResult(): ?AuthResult
     {
-        return null;
+        return $this->lastResult;
     }
 
     public static function get(): ?self
