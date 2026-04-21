@@ -26,7 +26,7 @@ final class ForbiddenConstructorRule implements Rule
 
     public function getNodeType(): string
     {
-        return ClassMethod::class;
+        return $this->delegate->getNodeType();
     }
 
     public function processNode(Node $node, Scope $scope): array
