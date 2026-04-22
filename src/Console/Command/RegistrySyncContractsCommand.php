@@ -43,11 +43,11 @@ class RegistrySyncContractsCommand extends BaseCommand
     {
         $io = new SymfonyStyle($input, $output);
         $root = $this->getProjectRoot();
-        $legacyContractsDir = $this->detectLegacyContractsDir($root);
-        if ($legacyContractsDir !== null) {
+        $nonCanonicalContractsDir = $this->detectNonCanonicalContractsDir($root);
+        if ($nonCanonicalContractsDir !== null) {
             $io->error(sprintf(
-                'Legacy contract resolver directory detected at %s. Move or remove it before syncing so %s stays the single generated location.',
-                $legacyContractsDir,
+                'Non-canonical contracts directory detected at %s. Move or remove it before syncing so %s stays the single generated location.',
+                $nonCanonicalContractsDir,
                 self::CONTRACTS_PATH,
             ));
             return Command::FAILURE;
@@ -79,14 +79,45 @@ class RegistrySyncContractsCommand extends BaseCommand
         }
     }
 
-    private function detectLegacyContractsDir(string $root): ?string
+    private function detectNonCanonicalContractsDir(string $root): ?string
     {
-        $legacyContractsDir = 'src/Registry/Contracts';
-        $legacyDir = $root . '/' . $legacyContractsDir;
-        if ($legacyContractsDir === CanonicalRegistryPaths::REGISTRY_CONTRACTS) {
-            return null;
+        $segments = explode('/', CanonicalRegistryPaths::REGISTRY_CONTRACTS);
+        $currentDir = $root;
+        $relativeSegments = [];
+
+        foreach ($segments as $segment) {
+            if (!is_dir($currentDir)) {
+                return null;
+            }
+
+            $entries = scandir($currentDir);
+            if ($entries === false) {
+                return null;
+            }
+
+            foreach ($entries as $entry) {
+                if ($entry === '.' || $entry === '..' || $entry === $segment) {
+                    continue;
+                }
+
+                if (strtolower($entry) !== strtolower($segment)) {
+                    continue;
+                }
+
+                $candidateDir = $currentDir . '/' . $entry;
+                if (!is_dir($candidateDir)) {
+                    continue;
+                }
+
+                $relativeSegments[] = $entry;
+
+                return implode('/', $relativeSegments);
+            }
+
+            $relativeSegments[] = $segment;
+            $currentDir .= '/' . $segment;
         }
 
-        return is_dir($legacyDir) ? $legacyContractsDir : null;
+        return null;
     }
 }
