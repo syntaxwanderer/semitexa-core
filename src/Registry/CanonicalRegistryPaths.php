@@ -15,4 +15,5 @@ final class CanonicalRegistryPaths
     public const REGISTRY_PAYLOADS = 'src/registry/Payloads';
     public const REGISTRY_RESOURCES = 'src/registry/Resources';
     public const REGISTRY_NAMESPACE = 'App\\Registry';
+    public const REGISTRY_CONTRACTS_NAMESPACE = self::REGISTRY_NAMESPACE . '\\Contracts';
 }

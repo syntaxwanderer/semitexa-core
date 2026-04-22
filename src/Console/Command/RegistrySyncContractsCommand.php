@@ -16,13 +16,16 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Discover service contracts with 2+ implementations, generate resolver classes
- * in src/registry/Contracts/. Single-implementation contracts are not generated
- * (container binds interface to that implementation directly).
+ * Discover service contracts with 2+ implementations and generate resolver
+ * classes in the canonical contracts directory. Single-implementation contracts
+ * are not generated; the container binds those interfaces directly.
  */
-#[AsCommand(name: 'registry:sync:contracts', description: 'Generate contract resolvers in src/registry/Contracts/ for interfaces with 2+ implementations.')]
+#[AsCommand(name: 'registry:sync:contracts', description: self::DESCRIPTION)]
 class RegistrySyncContractsCommand extends BaseCommand
 {
+    private const CONTRACTS_PATH = CanonicalRegistryPaths::REGISTRY_CONTRACTS;
+    private const DESCRIPTION = 'Generate contract resolvers in ' . self::CONTRACTS_PATH . ' for interfaces with 2+ implementations.';
+
     public function __construct(
         private readonly ClassDiscovery $classDiscovery,
         private readonly ModuleRegistry $moduleRegistry,
@@ -33,12 +36,22 @@ class RegistrySyncContractsCommand extends BaseCommand
     protected function configure(): void
     {
         $this->setName('registry:sync:contracts')
-            ->setDescription('Generate contract resolvers in src/registry/Contracts/ for interfaces with 2+ implementations.');
+            ->setDescription(self::DESCRIPTION);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $io = new SymfonyStyle($input, $output);
         $root = $this->getProjectRoot();
+        $legacyContractsDir = $this->detectLegacyContractsDir($root);
+        if ($legacyContractsDir !== null) {
+            $io->error(sprintf(
+                'Legacy contract resolver directory detected at %s. Move or remove it before syncing so %s stays the single generated location.',
+                $legacyContractsDir,
+                self::CONTRACTS_PATH,
+            ));
+            return Command::FAILURE;
+        }
         $this->ensureRegistryDirs($root);
 
         $contractRegistry = new ServiceContractRegistry($this->classDiscovery, $this->moduleRegistry);
@@ -50,12 +63,11 @@ class RegistrySyncContractsCommand extends BaseCommand
         $generated = RegistryContractResolverGenerator::generateAll($multiImpl);
         $generatedFactories = RegistryContractResolverGenerator::generateAllFactories($multiImpl);
 
-        $io = new SymfonyStyle($input, $output);
         $msg = count($generated) . ' resolver(s)';
         if (count($generatedFactories) > 0) {
             $msg .= ', ' . count($generatedFactories) . ' factory(ies)';
         }
-        $io->success('Registry contract resolvers synced: ' . $msg . ' in ' . CanonicalRegistryPaths::REGISTRY_CONTRACTS . '/.');
+        $io->success('Registry contract resolvers synced: ' . $msg . ' in ' . self::CONTRACTS_PATH);
         return Command::SUCCESS;
     }
 
@@ -65,5 +77,16 @@ class RegistrySyncContractsCommand extends BaseCommand
         if (!is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
+    }
+
+    private function detectLegacyContractsDir(string $root): ?string
+    {
+        $legacyContractsDir = 'src/Registry/Contracts';
+        $legacyDir = $root . '/' . $legacyContractsDir;
+        if ($legacyContractsDir === CanonicalRegistryPaths::REGISTRY_CONTRACTS) {
+            return null;
+        }
+
+        return is_dir($legacyDir) ? $legacyContractsDir : null;
     }
 }

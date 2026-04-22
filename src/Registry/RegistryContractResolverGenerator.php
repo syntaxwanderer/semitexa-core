@@ -106,7 +106,7 @@ class RegistryContractResolverGenerator
         if ($baseShort === $short) {
             $baseShort = $short;
         }
-        return CanonicalRegistryPaths::REGISTRY_NAMESPACE . '\\Contracts' . '\\' . $baseShort . 'Factory';
+        return CanonicalRegistryPaths::REGISTRY_CONTRACTS_NAMESPACE . '\\' . $baseShort . 'Factory';
     }
 
     /**
@@ -124,7 +124,7 @@ class RegistryContractResolverGenerator
         if ($resolverShortName === $baseRef->getShortName()) {
             $resolverShortName = $baseRef->getShortName() . 'Resolver';
         }
-        $resolverClass = CanonicalRegistryPaths::REGISTRY_NAMESPACE . '\\Contracts' . '\\' . $resolverShortName;
+        $resolverClass = CanonicalRegistryPaths::REGISTRY_CONTRACTS_NAMESPACE . '\\' . $resolverShortName;
         $factoryShortName = preg_replace('/Interface$/', '', $baseRef->getShortName());
         if ($factoryShortName === $baseRef->getShortName()) {
             $factoryShortName = $baseRef->getShortName();
@@ -217,7 +217,7 @@ final class {$factoryShortName} implements {$factoryInterfaceTypeHint}
 PHP;
 
         file_put_contents($outPath, $content);
-        return CanonicalRegistryPaths::REGISTRY_NAMESPACE . '\\Contracts' . '\\' . $factoryShortName;
+        return CanonicalRegistryPaths::REGISTRY_CONTRACTS_NAMESPACE . '\\' . $factoryShortName;
     }
 
     /**
@@ -353,7 +353,7 @@ final class {$resolverShortName}
 PHP;
 
         file_put_contents($outPath, $content);
-        return CanonicalRegistryPaths::REGISTRY_NAMESPACE . '\\Contracts' . '\\' . $resolverShortName;
+        return CanonicalRegistryPaths::REGISTRY_CONTRACTS_NAMESPACE . '\\' . $resolverShortName;
     }
 
     private static function uniqueParamName(string $class, array $used): string
