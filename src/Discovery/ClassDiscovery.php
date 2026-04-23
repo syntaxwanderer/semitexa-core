@@ -25,11 +25,13 @@ class ClassDiscovery
      * require-dev dependencies (phpstan/phpstan, phpunit/phpunit), which are absent
      * in consumer projects — scanning them triggers autoload errors and floods the
      * boot log with [skip] warnings. Filtering at classmap-population time keeps
-     * them out of every downstream iteration.
+     * them out of every downstream iteration. Composer is intentionally scoped to
+     * the framework's plugin namespace so consumer classes like App\Composer\*
+     * remain discoverable.
      */
     private const RUNTIME_EXCLUDE_SUBSTRINGS = [
         '\\PHPStan\\',
-        '\\Composer\\',
+        '\\Core\\Composer\\',
         '\\Tests\\',
         '\\Testing\\PhpUnit',
     ];

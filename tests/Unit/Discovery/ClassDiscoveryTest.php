@@ -51,10 +51,12 @@ final class ClassDiscoveryTest extends TestCase
             $classMap = $discovery->getClassMap();
 
             self::assertArrayHasKey('Semitexa\\Fixture\\RuntimeService', $classMap);
+            self::assertArrayHasKey('Semitexa\\Fixture\\Composer\\RuntimeHook', $classMap);
+            self::assertArrayHasKey('App\\Composer\\AppHook', $classMap);
             self::assertArrayNotHasKey('Semitexa\\Fixture\\PHPStan\\Rules\\SomeRule', $classMap);
             self::assertArrayNotHasKey('Semitexa\\Fixture\\Testing\\PhpUnitExtension', $classMap);
             self::assertArrayNotHasKey('Semitexa\\Fixture\\Tests\\Unit\\SomeTest', $classMap);
-            self::assertArrayNotHasKey('Semitexa\\Fixture\\Composer\\InstallPlugin', $classMap);
+            self::assertArrayNotHasKey('Semitexa\\Core\\Composer\\InstallPlugin', $classMap);
         } finally {
             ProjectRoot::reset();
             $this->removeDirectory($root);
@@ -119,6 +121,7 @@ PHP,
     {
         $root = sys_get_temp_dir() . '/semitexa-class-discovery-devonly-' . uniqid('', true);
         $fixtureDir = $root . '/src/Fixture';
+        $appComposerDir = $root . '/src/AppComposer';
         $composerDir = $root . '/vendor/composer';
 
         mkdir($root . '/src/modules', 0755, true);
@@ -126,21 +129,25 @@ PHP,
         mkdir($fixtureDir . '/Testing', 0755, true);
         mkdir($fixtureDir . '/Tests/Unit', 0755, true);
         mkdir($fixtureDir . '/Composer', 0755, true);
+        mkdir($root . '/src/Core/Composer', 0755, true);
+        mkdir($appComposerDir, 0755, true);
         mkdir($composerDir, 0755, true);
 
         file_put_contents($root . '/composer.json', "{}\n");
         file_put_contents($composerDir . '/autoload_classmap.php', "<?php\nreturn [];\n");
         file_put_contents(
             $composerDir . '/autoload_psr4.php',
-            "<?php\nreturn [\n    'Semitexa\\\\Fixture\\\\' => [__DIR__ . '/../../src/Fixture'],\n];\n",
+            "<?php\nreturn [\n    'Semitexa\\\\Fixture\\\\' => [__DIR__ . '/../../src/Fixture'],\n    'Semitexa\\\\Core\\\\' => [__DIR__ . '/../../src/Core'],\n    'App\\\\' => [__DIR__ . '/../../src/AppComposer'],\n];\n",
         );
 
         $fixtures = [
             $fixtureDir . '/RuntimeService.php' => ['Semitexa\\Fixture', 'RuntimeService'],
+            $fixtureDir . '/Composer/RuntimeHook.php' => ['Semitexa\\Fixture\\Composer', 'RuntimeHook'],
             $fixtureDir . '/PHPStan/Rules/SomeRule.php' => ['Semitexa\\Fixture\\PHPStan\\Rules', 'SomeRule'],
             $fixtureDir . '/Testing/PhpUnitExtension.php' => ['Semitexa\\Fixture\\Testing', 'PhpUnitExtension'],
             $fixtureDir . '/Tests/Unit/SomeTest.php' => ['Semitexa\\Fixture\\Tests\\Unit', 'SomeTest'],
-            $fixtureDir . '/Composer/InstallPlugin.php' => ['Semitexa\\Fixture\\Composer', 'InstallPlugin'],
+            $root . '/src/Core/Composer/InstallPlugin.php' => ['Semitexa\\Core\\Composer', 'InstallPlugin'],
+            $appComposerDir . '/AppHook.php' => ['App\\Composer', 'AppHook'],
         ];
 
         foreach ($fixtures as $path => [$namespace, $class]) {
