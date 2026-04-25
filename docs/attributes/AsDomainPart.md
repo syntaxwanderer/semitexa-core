@@ -170,7 +170,7 @@ trait UserMarketingProfileDomainTrait
 ## Differences from AsEntityPart
 
 - **AsEntityPart**: Extends ORM-owned storage entities — can have ORM attributes
-- **AsDomainPart**: Extends domain models (domain layer) - no ORM attributes, only business logic
+- **AsDomainPart**: Extends domain models (domain layer) — no ORM attributes, only business logic
 
 ## Related attributes
 
