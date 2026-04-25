@@ -13,6 +13,40 @@ use Semitexa\Core\Request;
 
 final class CsrfListenerTest extends TestCase
 {
+    public function testUnsafeRequestWithoutSessionCookieSkipsMissingAuthContext(): void
+    {
+        $listener = new CsrfListener();
+        $context = new RequestPipelineContext(
+            requestDto: new \stdClass(),
+            route: new DiscoveredRoute(
+                path: '/api/events',
+                methods: ['POST'],
+                name: 'api.events',
+                requestClass: \stdClass::class,
+                responseClass: null,
+                handlers: [],
+                type: 'http_request',
+                transport: null,
+                produces: null,
+                consumes: null,
+                module: 'core',
+            ),
+            request: new Request(
+                method: 'POST',
+                uri: '/api/events',
+                headers: [],
+                query: [],
+                post: [],
+                server: [],
+                cookies: [],
+            ),
+        );
+
+        $listener->handle($context);
+
+        $this->addToAssertionCount(1);
+    }
+
     public function testUnsafeSessionRequestWithoutAuthContextFailsClosed(): void
     {
         $listener = new CsrfListener();
