@@ -330,6 +330,11 @@ class AttributeDiscovery
                         'consumes' => $attr->consumes,
                         'produces' => $attr->produces,
                         'transport' => $attr->transport,
+                        // Phase 3e: multi-profile dispatch metadata. Both fields
+                        // pass through unchanged — RouteExecutor + dispatcher
+                        // consume them at request time.
+                        'renderProfile' => $attr->renderProfile,
+                        'responsesByProfile' => $attr->responsesByProfile,
                     ],
                 ];
                 $requestMeta[$className] = $meta;
@@ -448,6 +453,11 @@ class AttributeDiscovery
                 'produces' => $routeProduces,
                 'module' => $selectedModule,
                 'tenantScopes' => $selectedTenantScopes,
+                // Phase 3e: thread the multi-profile metadata through to the
+                // routing layer so RouteExecutor + CrossProfileDispatcher can
+                // pick the right response class per request.
+                'renderProfile' => $resolved['renderProfile'] ?? null,
+                'responsesByProfile' => $resolved['responsesByProfile'] ?? null,
             ]);
         }
     }
@@ -714,8 +724,8 @@ class AttributeDiscovery
     private static function mergeRequestAttributes(array $base, array $override): array
     {
         $result = $base;
-        foreach (['path','methods','name','requirements','defaults','options','tags','public','responseWith','consumes','produces','transport'] as $key) {
-            if ($override[$key] !== null) {
+        foreach (['path','methods','name','requirements','defaults','options','tags','public','responseWith','consumes','produces','transport','renderProfile','responsesByProfile'] as $key) {
+            if (($override[$key] ?? null) !== null) {
                 $result[$key] = $override[$key];
             }
         }
@@ -744,6 +754,10 @@ class AttributeDiscovery
             'consumes' => $attr['consumes'] ?? null,
             'produces' => $attr['produces'] ?? null,
             'transport' => $attr['transport'] ?? TransportType::Http,
+            // Phase 3e: forwarded as-is from the source attribute. null when
+            // unset (single-profile / no negotiation).
+            'renderProfile' => $attr['renderProfile'] ?? null,
+            'responsesByProfile' => $attr['responsesByProfile'] ?? null,
         ];
     }
 
