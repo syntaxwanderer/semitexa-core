@@ -330,6 +330,11 @@ class AttributeDiscovery
                         'consumes' => $attr->consumes,
                         'produces' => $attr->produces,
                         'transport' => $attr->transport,
+                        // Phase 3e: multi-profile dispatch metadata. Both fields
+                        // pass through unchanged — RouteExecutor + dispatcher
+                        // consume them at request time.
+                        'renderProfile' => $attr->renderProfile,
+                        'responsesByProfile' => $attr->responsesByProfile,
                     ],
                 ];
                 $requestMeta[$className] = $meta;
@@ -448,6 +453,11 @@ class AttributeDiscovery
                 'produces' => $routeProduces,
                 'module' => $selectedModule,
                 'tenantScopes' => $selectedTenantScopes,
+                // Phase 3e: thread the multi-profile metadata through to the
+                // routing layer so RouteExecutor + CrossProfileDispatcher can
+                // pick the right response class per request.
+                'renderProfile' => $resolved['renderProfile'] ?? null,
+                'responsesByProfile' => $resolved['responsesByProfile'] ?? null,
             ]);
         }
     }
@@ -530,7 +540,7 @@ class AttributeDiscovery
         // Discover layout slot contributions (optional)
         if (
             class_exists('Semitexa\\Ssr\\Attribute\\AsLayoutSlot')
-            && class_exists('Semitexa\\Ssr\\Layout\\LayoutSlotRegistry')
+            && class_exists('Semitexa\\Ssr\\Application\\Service\\Layout\\LayoutSlotRegistry')
         ) {
             $slotAttribute = 'Semitexa\\Ssr\\Attribute\\AsLayoutSlot';
             $slotClasses = $this->classDiscovery->findClassesWithAttribute($slotAttribute);
@@ -545,7 +555,7 @@ class AttributeDiscovery
                         $slot = $meta->slot;
                         $template = EnvValueResolver::resolve($meta->template);
                         $context = EnvValueResolver::resolve($meta->context);
-                        \Semitexa\Ssr\Layout\LayoutSlotRegistry::register(
+                        \Semitexa\Ssr\Application\Service\Layout\LayoutSlotRegistry::register(
                             $handle,
                             $slot,
                             $template,
@@ -604,7 +614,7 @@ class AttributeDiscovery
         // Discover AsSlotResource contributions (optional)
         if (
             class_exists('Semitexa\\Ssr\\Attribute\\AsSlotResource')
-            && class_exists('Semitexa\\Ssr\\Layout\\LayoutSlotRegistry')
+            && class_exists('Semitexa\\Ssr\\Application\\Service\\Layout\\LayoutSlotRegistry')
         ) {
             $slotResourceAttribute = 'Semitexa\\Ssr\\Attribute\\AsSlotResource';
             $slotResourceClasses = array_values(array_filter(
@@ -625,7 +635,7 @@ class AttributeDiscovery
                             $meta->clientModules,
                             static fn (string $module): bool => $module !== ''
                         ));
-                        \Semitexa\Ssr\Layout\LayoutSlotRegistry::register(
+                        \Semitexa\Ssr\Application\Service\Layout\LayoutSlotRegistry::register(
                             handle: $meta->handle,
                             slot: $meta->slot,
                             template: $template,
@@ -650,7 +660,7 @@ class AttributeDiscovery
         // Discover AsSlotHandler contributions (optional)
         if (
             class_exists('Semitexa\\Ssr\\Attribute\\AsSlotHandler')
-            && class_exists('Semitexa\\Ssr\\Layout\\SlotHandlerRegistry')
+            && class_exists('Semitexa\\Ssr\\Application\\Service\\Layout\\SlotHandlerRegistry')
         ) {
             $slotHandlerAttribute = 'Semitexa\\Ssr\\Attribute\\AsSlotHandler';
             $slotHandlerClasses = array_values(array_filter(
@@ -664,7 +674,7 @@ class AttributeDiscovery
                     foreach ($attrs as $attr) {
                         /** @var \Semitexa\Ssr\Attribute\AsSlotHandler $meta */
                         $meta = $attr->newInstance();
-                        \Semitexa\Ssr\Layout\SlotHandlerRegistry::register(
+                        \Semitexa\Ssr\Application\Service\Layout\SlotHandlerRegistry::register(
                             slotClass: $meta->slot,
                             handlerClass: $className,
                             priority: $meta->priority,
@@ -714,8 +724,8 @@ class AttributeDiscovery
     private static function mergeRequestAttributes(array $base, array $override): array
     {
         $result = $base;
-        foreach (['path','methods','name','requirements','defaults','options','tags','public','responseWith','consumes','produces','transport'] as $key) {
-            if ($override[$key] !== null) {
+        foreach (['path','methods','name','requirements','defaults','options','tags','public','responseWith','consumes','produces','transport','renderProfile','responsesByProfile'] as $key) {
+            if (($override[$key] ?? null) !== null) {
                 $result[$key] = $override[$key];
             }
         }
@@ -744,6 +754,10 @@ class AttributeDiscovery
             'consumes' => $attr['consumes'] ?? null,
             'produces' => $attr['produces'] ?? null,
             'transport' => $attr['transport'] ?? TransportType::Http,
+            // Phase 3e: forwarded as-is from the source attribute. null when
+            // unset (single-profile / no negotiation).
+            'renderProfile' => $attr['renderProfile'] ?? null,
+            'responsesByProfile' => $attr['responsesByProfile'] ?? null,
         ];
     }
 

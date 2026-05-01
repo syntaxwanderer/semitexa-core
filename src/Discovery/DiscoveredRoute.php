@@ -41,6 +41,22 @@ final readonly class DiscoveredRoute
         public array $tags = [],
         public bool $public = false,
         public array $tenantScopes = [],
+        /**
+         * Phase 3e: declared render profile(s).
+         * `RenderProfile` for single-profile routes,
+         * `list<RenderProfile>` for multi-profile routes,
+         * `null` when the route uses the legacy `responseWith`-only path.
+         *
+         * @var \Semitexa\Core\Resource\RenderProfile|list<\Semitexa\Core\Resource\RenderProfile>|null
+         */
+        public mixed $renderProfile = null,
+        /**
+         * Phase 3e: profile-value → response class map for Accept-driven dispatch.
+         * Keys are `RenderProfile::value` (e.g. `'json'`, `'json-ld'`).
+         *
+         * @var array<string, class-string>|null
+         */
+        public ?array $responsesByProfile = null,
     ) {}
 
     /**
@@ -112,6 +128,8 @@ final readonly class DiscoveredRoute
             tags: $tags,
             public: (bool) ($route['public'] ?? false),
             tenantScopes: $tenantScopes,
+            renderProfile: $route['renderProfile'] ?? null,
+            responsesByProfile: is_array($route['responsesByProfile'] ?? null) ? $route['responsesByProfile'] : null,
         );
     }
 

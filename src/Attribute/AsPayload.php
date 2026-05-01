@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Core\Attribute;
 
 use Attribute;
+use Semitexa\Core\Resource\RenderProfile;
 
 /**
  * Marks a class as a payload (request) DTO with route information
@@ -61,6 +62,35 @@ class AsPayload
         /** @var list<string>|null Response Content-Types this endpoint can produce. null = all. */
         public ?array $produces = null,
         public ?TransportType $transport = null,
+        /**
+         * Render profile selection for the route's ResourceDTO output.
+         * Single value → forced profile, Accept ignored for selection.
+         * List of values → Accept negotiates among declared profiles; first listed entry is the default.
+         * null → defaults to RenderProfile::Json at request time.
+         *
+         * @var RenderProfile|list<RenderProfile>|null
+         */
+        public RenderProfile|array|null $renderProfile = null,
+        /**
+         * Phase 3e: explicit mapping from RenderProfile value (e.g. 'json',
+         * 'json-ld') to the response class to instantiate when that profile
+         * is selected via Accept negotiation.
+         *
+         * Single-profile routes use `responseWith` and ignore this field.
+         * Multi-profile routes set it to a profile-value → response-class map:
+         *
+         *     responsesByProfile: [
+         *         'json'    => CustomerJsonResponse::class,
+         *         'json-ld' => CustomerJsonLdResponse::class,
+         *     ]
+         *
+         * The key MUST match `RenderProfile::value`. Using the enum value
+         * (rather than the case) keeps the attribute payload trivially
+         * serializable and PHPStan-checkable.
+         *
+         * @var array<string, class-string>|null
+         */
+        public ?array $responsesByProfile = null,
     ) {
         $this->doc = $doc;
         if ($this->consumes !== null) {

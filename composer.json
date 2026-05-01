@@ -30,6 +30,11 @@
       "src/PHPStan/"
     ]
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Semitexa\\Core\\Tests\\": "tests/"
+    }
+  },
   "bin": [
     "bin/semitexa"
   ],
